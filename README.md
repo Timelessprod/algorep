@@ -1,5 +1,10 @@
 # ALGOREP Project
 
+We choose to work on the second project : Distributed job queue system.
+Full subject is available in the [subject.pdf](subject.pdf) file.
+
+We choose to develop the project in Go language.
+
 ## A) Goal of the project
 
 We wish to set up a client/server system with a mechanism to control or inject
@@ -24,3 +29,8 @@ by the client at the end.
 ## C) Running our project
 
 Simply clone the repository and run `make` at its root.
+
+## D) Progression
+
+Current advancements on the project, regarding completed steps :
+![](https://geps.dev/progress/0)
