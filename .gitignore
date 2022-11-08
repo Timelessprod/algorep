@@ -7,6 +7,8 @@
 *.dll
 *.so
 *.dylib
+job_scheduler
+algorep
 
 # Test binary, built with `go test -c`
 *.test
