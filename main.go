@@ -75,7 +75,13 @@ type Node struct {
 
 // handleAppendEntryRPC
 func (node *Node) handleAppendEntryRPC(appendEntryRPC AppendEntryRPC) {
-	logger.Debug("handleAppendEntryRPC", zap.Uint32("fromNode", appendEntryRPC.fromNode), zap.Uint32("toNode", appendEntryRPC.toNode))
+	logger.Debug("handleAppendEntryRPC",
+		zap.Uint32("fromNode", appendEntryRPC.fromNode),
+		zap.Uint32("toNode", appendEntryRPC.toNode),
+		zap.String("message", appendEntryRPC.message),
+	)
+	fromNodeChannel := config.nodeChannelList[appendEntryRPC.fromNode]
+	fromNodeChannel.appendEntry <- AppendEntryRPC{fromNode: node.id, toNode: appendEntryRPC.fromNode, message: "Ping !"}
 }
 
 // handleRequestVoteRPC
@@ -115,7 +121,7 @@ func initLogger() *zap.Logger {
 	// Create a new logger with our custom configuration
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	config.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
+	config.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
 	config.DisableStacktrace = true // Disable stacktrace after WARN or ERROR
 
 	logger, _ := config.Build()
@@ -141,5 +147,6 @@ func main() {
 		go node.run()
 	}
 
+	config.nodeChannelList[0].appendEntry <- AppendEntryRPC{fromNode: 1, toNode: 0}
 	wg.Wait()
 }
