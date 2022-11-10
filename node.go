@@ -21,19 +21,26 @@ const (
 )
 
 type Node struct {
-	id              uint32
-	state           State
-	currentTerm     uint32
+	id          uint32
+	state       State
+	currentTerm uint32
+
 	votedFor        int32
 	electionTimeout time.Duration
+	voteCount       uint32
 
 	channel ChannelContainer
 }
+
+/*************
+ ** Methods **
+ *************/
 
 func (node *Node) init(id uint32) Node {
 	node.id = id
 	node.state = FollowerState
 	node.votedFor = -1
+	node.voteCount = 0
 
 	// Compute random leaderIsAliveTimeout
 	durationRange := int(config.maxElectionTimeout - config.minElectionTimeout)
@@ -44,22 +51,6 @@ func (node *Node) init(id uint32) Node {
 
 	logger.Info("Node initialized", zap.Uint32("id", id))
 	return *node
-}
-
-// handleAppendEntryRPC
-func (node *Node) handleAppendEntryRPC(appendEntryRPC AppendEntryRPC) {
-	logger.Debug("handleAppendEntryRPC",
-		zap.Uint32("fromNode", appendEntryRPC.fromNode),
-		zap.Uint32("toNode", appendEntryRPC.toNode),
-		zap.String("message", appendEntryRPC.message),
-	)
-	fromNodeChannel := config.nodeChannelList[appendEntryRPC.fromNode]
-	fromNodeChannel.appendEntry <- AppendEntryRPC{fromNode: node.id, toNode: appendEntryRPC.fromNode, message: "Ping !"}
-}
-
-// handleRequestVoteRPC
-func (node *Node) handleRequestVoteRPC(requestVoteRPC RequestVoteRPC) {
-	logger.Debug("handleRequestVoteRPC", zap.Uint32("fromNode", requestVoteRPC.fromNode), zap.Uint32("toNode", requestVoteRPC.toNode))
 }
 
 func (node *Node) getTimeOut() time.Duration {
@@ -75,16 +66,67 @@ func (node *Node) getTimeOut() time.Duration {
 	panic("Invalid node state")
 }
 
+func (node *Node) broadcastRequestVote() {
+	for i := uint32(0); i < config.nodeNUmber; i++ {
+		if i != node.id {
+			channel := config.nodeChannelList[i].requestVote
+			request := RequestVoteRPC{
+				fromNode:    node.id,
+				toNode:      i,
+				term:        node.currentTerm,
+				candidateId: node.id,
+			}
+			channel <- request
+		}
+	}
+}
+
+func (node *Node) startNewElection() {
+	logger.Info("Start new election", zap.Uint32("id", node.id))
+	node.state = CandidateState
+	node.voteCount = 0
+	node.currentTerm++
+	node.votedFor = int32(node.id)
+	node.broadcastRequestVote()
+}
+
+/************
+ ** Handle **
+ ************/
+
+// handleAppendEntryRPC
+func (node *Node) handleAppendEntryRPC(appendEntryRPC AppendEntryRPC) {
+	logger.Debug("handleAppendEntryRPC",
+		zap.Uint32("fromNode", appendEntryRPC.fromNode),
+		zap.Uint32("toNode", appendEntryRPC.toNode),
+	)
+}
+
+// handleRequestVoteRPC
+func (node *Node) handleRequestVoteRPC(requestVoteRPC RequestVoteRPC) {
+	logger.Debug("handleRequestVoteRPC",
+		zap.Uint32("fromNode", requestVoteRPC.fromNode),
+		zap.Uint32("toNode", requestVoteRPC.toNode),
+		zap.Int("candidateId", int(requestVoteRPC.candidateId)),
+	)
+}
+
 func (node *Node) handleTimeout() {
 	switch node.state {
 	case FollowerState:
 		logger.Warn("Leader does not respond", zap.Uint32("id", node.id), zap.Duration("electionTimeout", node.electionTimeout))
+		node.startNewElection()
 	case CandidateState:
 		logger.Warn("Too much time to get a majority vote", zap.Uint32("id", node.id), zap.Duration("electionTimeout", node.electionTimeout))
+		node.startNewElection()
 	case LeaderState:
 		logger.Info("It's time for the Leader to send an IsAlive notification to followers", zap.Uint32("id", node.id))
 	}
 }
+
+/*********
+ ** Run **
+ *********/
 
 func (node *Node) run() {
 	logger.Info("Node started", zap.Uint32("id", node.id))
