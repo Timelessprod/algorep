@@ -108,8 +108,9 @@ func (node *Node) handleRequestCommandRPC(request RequestCommandRPC) {
 	logger.Debug("Handle Request Command RPC",
 		zap.Uint32("fromNode", request.fromNode),
 		zap.Uint32("toNode", request.toNode),
+		zap.String("commandType", request.commandType.String()),
 	)
-	//TODO
+	//TODO Manage command (add Entry/Sync log / conflict resolution / success / failure)
 }
 
 // Handle Response Command RPC
@@ -117,8 +118,10 @@ func (node *Node) handleResponseCommandRPC(response ResponseCommandRPC) {
 	logger.Debug("Handle Response Command RPC",
 		zap.Uint32("fromNode", response.fromNode),
 		zap.Uint32("toNode", response.toNode),
+		zap.Uint32("term", response.term),
+		zap.Bool("success", response.success),
 	)
-	//TODO
+	//TODO if majority of success, commit
 }
 
 // Handle Request Vote RPC
@@ -185,6 +188,22 @@ func (node *Node) handleResponseVoteRPC(response ResponseVoteRPC) {
 	}
 }
 
+// Handle Is Alive Notification RPC
+func (node *Node) broadcastSynchronizeCommandRPC() {
+	for i := uint32(0); i < config.nodeCount; i++ {
+		if i != node.id {
+			channel := config.nodeChannelList[i].requestCommand
+			request := RequestCommandRPC{
+				fromNode:    node.id,
+				toNode:      i,
+				term:        node.currentTerm,
+				commandType: Synchronize,
+			}
+			channel <- request
+		}
+	}
+}
+
 func (node *Node) handleTimeout() {
 	switch node.state {
 	case FollowerState:
@@ -195,6 +214,7 @@ func (node *Node) handleTimeout() {
 		node.startNewElection()
 	case LeaderState:
 		logger.Info("It's time for the Leader to send an IsAlive notification to followers", zap.Uint32("id", node.id))
+		node.broadcastSynchronizeCommandRPC()
 	}
 }
 
