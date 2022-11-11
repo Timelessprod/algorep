@@ -6,10 +6,10 @@ $(BIN): build
 
 build:
 	go mod tidy
-	go build -o $(BIN)
+	go build -o $(BIN) ./cmd/main
 
 exec: $(BIN)
-	./$(BIN) 2>&1 | tee app.log
+	./$(BIN)
 
 test:
 	go test -v

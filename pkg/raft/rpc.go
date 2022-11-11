@@ -1,4 +1,4 @@
-package main
+package raft
 
 /*** Command (AppendEntry in paper) ***/
 
@@ -14,37 +14,37 @@ func (c CommandType) String() string {
 }
 
 type RequestCommandRPC struct {
-	fromNode uint32
-	toNode   uint32
+	FromNode uint32
+	ToNode   uint32
 
-	term        uint32
-	commandType CommandType
-	message     string
+	Term        uint32
+	CommandType CommandType
+	Message     string
 }
 
 type ResponseCommandRPC struct {
-	fromNode uint32
-	toNode   uint32
+	FromNode uint32
+	ToNode   uint32
 
-	term       uint32
-	success    bool
-	matchIndex uint32
+	Term       uint32
+	Success    bool
+	MatchIndex uint32
 }
 
 /*** Vote ***/
 
 type RequestVoteRPC struct {
-	fromNode uint32
-	toNode   uint32
+	FromNode uint32
+	ToNode   uint32
 
-	term        uint32
-	candidateId uint32
+	Term        uint32
+	CandidateId uint32
 }
 
 type ResponseVoteRPC struct {
-	fromNode uint32
-	toNode   uint32
+	FromNode uint32
+	ToNode   uint32
 
-	term        uint32
-	voteGranted bool
+	Term        uint32
+	VoteGranted bool
 }

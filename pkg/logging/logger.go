@@ -1,13 +1,13 @@
-package main
+package logging
 
 import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-var logger *zap.Logger
+var Logger *zap.Logger = InitLogger()
 
-func initLogger() *zap.Logger {
+func InitLogger() *zap.Logger {
 	// Create a new logger with our custom configuration
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
