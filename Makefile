@@ -1,6 +1,6 @@
 BIN=job_scheduler
 
-all: build exec
+all: clean build exec
 
 $(BIN): build
 
@@ -13,3 +13,7 @@ exec: $(BIN)
 
 test:
 	go test -v
+
+clean:
+	rm -f $(BIN)
+	rm -f app.log
