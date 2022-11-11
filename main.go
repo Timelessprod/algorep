@@ -11,7 +11,7 @@ func main() {
 	defer logger.Sync()
 
 	// Create nodes
-	for i := uint32(0); i < config.nodeNUmber; i++ {
+	for i := uint32(0); i < config.nodeCount; i++ {
 		wg.Add(1)
 		node := Node{}
 		node.init(i)

@@ -3,7 +3,7 @@ package main
 import "time"
 
 type Config struct {
-	nodeNUmber                  uint32
+	nodeCount                   uint32
 	channelBufferSize           uint32
 	nodeChannelList             []*ChannelContainer
 	minElectionTimeout          time.Duration
@@ -12,7 +12,7 @@ type Config struct {
 }
 
 var config = Config{
-	nodeNUmber:        5,
+	nodeCount:         5,
 	channelBufferSize: 100,
 	// Range of time to wait for a leader heartbeat or granting vote to candidate
 	minElectionTimeout: 150 * time.Millisecond,
