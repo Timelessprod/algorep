@@ -145,6 +145,7 @@ func (node *Node) handleRequestVoteRPC(request RequestVoteRPC) {
 		node.votedFor = int32(request.candidateId)
 		response.voteGranted = true
 		node.currentTerm = request.term
+		node.state = FollowerState
 	}
 	channel <- response
 	// TODO check if the candidate is up to date (log)
