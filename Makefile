@@ -9,7 +9,7 @@ build:
 	go build -o $(BIN)
 
 exec: $(BIN)
-	./$(BIN)
+	./$(BIN) 2>&1 | tee app.log
 
 test:
 	go test -v
