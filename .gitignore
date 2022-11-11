@@ -10,6 +10,9 @@
 job_scheduler
 algorep
 
+# Log
+*.log
+
 # Test binary, built with `go test -c`
 *.test
 
