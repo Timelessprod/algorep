@@ -5,6 +5,7 @@ import (
 
 	"github.com/Timelessprod/algorep/pkg/logging"
 	"github.com/Timelessprod/algorep/pkg/raft"
+	"github.com/Timelessprod/algorep/pkg/repl"
 	"go.uber.org/zap"
 )
 
@@ -25,5 +26,8 @@ func main() {
 		go node.Run(&wg)
 	}
 
+	// Run interactive console
+	go repl.REPL()
+	// Wait for all nodes to finish
 	wg.Wait()
 }
