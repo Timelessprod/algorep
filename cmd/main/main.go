@@ -21,7 +21,7 @@ func main() {
 		node := raft.Node{}
 		node.Init(i)
 
-		raft.Config.NodeChannelList = append(raft.Config.NodeChannelList, &node.Channel)
+		raft.Config.NodeChannelMap[raft.SchedulerNodeType] = append(raft.Config.NodeChannelMap[raft.SchedulerNodeType], &node.Channel)
 
 		go node.Run(&wg)
 	}

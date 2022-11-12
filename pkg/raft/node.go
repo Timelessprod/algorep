@@ -11,12 +11,21 @@ import (
 
 var logger *zap.Logger = logging.Logger
 
-type ChannelContainer struct {
-	requestCommand  chan RequestCommandRPC
-	responseCommand chan ResponseCommandRPC
 
-	requestVote  chan RequestVoteRPC
-	responseVote chan ResponseVoteRPC
+type NodeType string
+
+const (
+	ClientNodeType NodeType = "Client"
+	SchedulerNodeType NodeType = "Scheduler"
+	WorkerNodeType NodeType = "Worker"
+)
+
+type ChannelContainer struct {
+	RequestCommand  chan RequestCommandRPC
+	ResponseCommand chan ResponseCommandRPC
+
+	RequestVote  chan RequestVoteRPC
+	ResponseVote chan ResponseVoteRPC
 }
 
 type State int
@@ -57,10 +66,10 @@ func (node *Node) Init(id uint32) Node {
 	durationRange := int(Config.MaxElectionTimeout - Config.MinElectionTimeout)
 	node.ElectionTimeout = time.Duration(rand.Intn(durationRange)) + Config.MinElectionTimeout
 
-	node.Channel.requestCommand = make(chan RequestCommandRPC, Config.ChannelBufferSize)
-	node.Channel.responseCommand = make(chan ResponseCommandRPC, Config.ChannelBufferSize)
-	node.Channel.requestVote = make(chan RequestVoteRPC, Config.ChannelBufferSize)
-	node.Channel.responseVote = make(chan ResponseVoteRPC, Config.ChannelBufferSize)
+	node.Channel.RequestCommand = make(chan RequestCommandRPC, Config.ChannelBufferSize)
+	node.Channel.ResponseCommand = make(chan ResponseCommandRPC, Config.ChannelBufferSize)
+	node.Channel.RequestVote = make(chan RequestVoteRPC, Config.ChannelBufferSize)
+	node.Channel.ResponseVote = make(chan ResponseVoteRPC, Config.ChannelBufferSize)
 
 	logger.Info("Node initialized", zap.Uint32("id", id))
 	return *node
@@ -82,7 +91,7 @@ func (node *Node) getTimeOut() time.Duration {
 func (node *Node) broadcastRequestVote() {
 	for i := uint32(0); i < Config.NodeCount; i++ {
 		if i != node.Id {
-			channel := Config.NodeChannelList[i].requestVote
+			channel := Config.NodeChannelMap[SchedulerNodeType][i].RequestVote
 			request := RequestVoteRPC{
 				FromNode:    node.Id,
 				ToNode:      i,
@@ -135,7 +144,7 @@ func (node *Node) handleRequestVoteRPC(request RequestVoteRPC) {
 		zap.Uint32("ToNode", request.ToNode),
 		zap.Int("CandidateId", int(request.CandidateId)),
 	)
-	channel := Config.NodeChannelList[request.FromNode].responseVote
+	channel := Config.NodeChannelMap[SchedulerNodeType][request.FromNode].ResponseVote
 	response := ResponseVoteRPC{
 		FromNode:    request.ToNode,
 		ToNode:      request.FromNode,
@@ -196,7 +205,7 @@ func (node *Node) handleResponseVoteRPC(response ResponseVoteRPC) {
 func (node *Node) broadcastSynchronizeCommandRPC() {
 	for i := uint32(0); i < Config.NodeCount; i++ {
 		if i != node.Id {
-			channel := Config.NodeChannelList[i].requestCommand
+			channel := Config.NodeChannelMap[SchedulerNodeType][i].RequestCommand
 			request := RequestCommandRPC{
 				FromNode:    node.Id,
 				ToNode:      i,
@@ -227,18 +236,20 @@ func (node *Node) handleTimeout() {
  *********/
 
 func (node *Node) Run(wg *sync.WaitGroup) {
-	logger.Info("Node started", zap.Uint32("id", node.Id))
 	defer wg.Done()
+	logger.Info("Node is waiting the START command from REPL", zap.Uint32("id", node.Id))
+	// TODO wait for the start command from REPL and listen to the channel RequestCommand
+	logger.Info("Node started", zap.Uint32("id", node.Id))
 
 	for {
 		select {
-		case request := <-node.Channel.requestCommand:
+		case request := <-node.Channel.RequestCommand:
 			node.handleRequestCommandRPC(request)
-		case response := <-node.Channel.responseCommand:
+		case response := <-node.Channel.ResponseCommand:
 			node.handleResponseCommandRPC(response)
-		case request := <-node.Channel.requestVote:
+		case request := <-node.Channel.RequestVote:
 			node.handleRequestVoteRPC(request)
-		case response := <-node.Channel.responseVote:
+		case response := <-node.Channel.ResponseVote:
 			node.handleResponseVoteRPC(response)
 		case <-time.After(node.getTimeOut()):
 			node.handleTimeout()
