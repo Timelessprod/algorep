@@ -22,3 +22,8 @@ type ChannelContainer struct {
 	RequestVote  chan RequestVoteRPC
 	ResponseVote chan ResponseVoteRPC
 }
+
+type NodeCard struct {
+	Id   uint32
+	Type NodeType
+}
