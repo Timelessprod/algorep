@@ -16,6 +16,10 @@ func (c CommandType) String() string {
 	return [...]string{"Synchronize", "AppendEntry", "Start", "Crash", "Recover"}[c]
 }
 
+type RPCType interface {
+	RequestCommandRPC | ResponseCommandRPC | RequestVoteRPC | ResponseVoteRPC
+}
+
 type RequestCommandRPC struct {
 	FromNode NodeCard
 	ToNode   NodeCard
