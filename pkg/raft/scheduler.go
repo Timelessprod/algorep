@@ -36,27 +36,6 @@ type SchedulerNode struct {
 	IsCrashed bool
 }
 
-/**************
- ** Function **
- **************/
-
-func SendWithLatency[MessageType RPCType](FromNode NodeCard, ToNode NodeCard, channel chan MessageType, message MessageType) {
-	latencyFromNode := 0 * time.Millisecond
-	if FromNode.Type == SchedulerNodeType {
-		latencyFromNode = Config.NodeSpeedList[FromNode.Id]
-	}
-
-	latencyToNode := 0 * time.Millisecond
-	if ToNode.Type == SchedulerNodeType {
-		latencyToNode = Config.NodeSpeedList[ToNode.Id]
-	}
-
-	latency := latencyFromNode + latencyToNode
-	time.AfterFunc(latency, func() {
-		channel <- message
-	})
-}
-
 /*************
  ** Methods **
  *************/
@@ -337,5 +316,6 @@ func (node *SchedulerNode) Run(wg *sync.WaitGroup) {
 		case <-time.After(node.getTimeOut()):
 			node.handleTimeout()
 		}
+		time.Sleep(Config.NodeSpeedList[node.Id])
 	}
 }

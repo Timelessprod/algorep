@@ -19,9 +19,9 @@ const (
 )
 
 const (
-	LowNodeSpeed   time.Duration = 100 * time.Millisecond
-	MediumNodeSpeed time.Duration = 25 * time.Millisecond
-	HighNodeSpeed   time.Duration = 5 * time.Millisecond
+	LowNodeSpeed   time.Duration = 50 * time.Millisecond
+	MediumNodeSpeed time.Duration = 10 * time.Millisecond
+	HighNodeSpeed   time.Duration = 2 * time.Millisecond
 )
 
 func (n NodeType) String() string {
