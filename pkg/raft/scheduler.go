@@ -101,6 +101,17 @@ func (node *SchedulerNode) startNewElection() {
  ** Handle **
  ************/
 
+func (node *SchedulerNode) handleStartCommand() {
+	if node.IsStarted {
+		logger.Debug("Node already started",
+			zap.String("Node", node.Card.String()),
+		)
+		return
+	} else {
+		node.IsStarted = true
+	}
+}
+
 // Handle Request Command RPC
 func (node *SchedulerNode) handleRequestCommandRPC(request RequestCommandRPC) {
 	logger.Debug("Handle Request Command RPC",
@@ -108,7 +119,18 @@ func (node *SchedulerNode) handleRequestCommandRPC(request RequestCommandRPC) {
 		zap.String("ToNode", request.ToNode.String()),
 		zap.String("CommandType", request.CommandType.String()),
 	)
-	//TODO Manage command (add Entry/Sync log / conflict resolution / success / failure)
+	switch request.CommandType {
+	case SynchronizeCommand:
+		// TODO
+	case AppendEntryCommand:
+		// TODO
+	case StartCommand:
+		node.handleStartCommand()
+	case CrashCommand:
+		// TODO
+	case RecoverCommand:
+		// TODO
+	}
 }
 
 // Handle Response Command RPC

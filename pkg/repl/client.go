@@ -73,15 +73,25 @@ func (client *ClientNode) handleSpeedCommand(tokenList []string) {
 }
 
 func (client *ClientNode) handleStartCommand() {
-	fmt.Println("Starting all nodes...")
-	//TODO : handle the start command
+	fmt.Print("Starting all nodes... ")
+	for index, channelContainer := range raft.Config.NodeChannelMap[raft.SchedulerNodeType] {
+		request := raft.RequestCommandRPC{
+			FromNode:    client.NodeCard,
+			ToNode:      raft.NodeCard{Id: uint32(index), Type: raft.SchedulerNodeType},
+			CommandType: raft.StartCommand,
+		}
+		channelContainer.RequestCommand <- request
+	}
+	//TODO : send start command to Worker nodes
+	fmt.Println("Done.")
 }
 
 func (client *ClientNode) handleCommand(command string) {
 	tokenList := strings.Fields(command)
 	if len(tokenList) == 0 {
-		//TODO
-		fmt.Println("Invalid command")
+		fmt.Println(INVALID_COMMAND_MESSAGE)
+		fmt.Println(HELP_MESSAGE)
+		return
 	}
 
 	commandToken := strings.ToUpper(tokenList[0])
@@ -91,8 +101,7 @@ func (client *ClientNode) handleCommand(command string) {
 	case CRASH_COMMAND.String():
 		client.handleCrashCommand(tokenList)
 	case START_COMMAND.String():
-
-		// TODO : handle the start command
+		client.handleStartCommand()
 	case STOP_COMMAND.String():
 		fmt.Println("STOP")
 		os.Exit(0)
