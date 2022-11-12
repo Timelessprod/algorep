@@ -7,7 +7,7 @@ import (
 )
 
 func printPrompt() {
-	fmt.Print("\n[Chaos Moneky REPL] $ ")
+	fmt.Print("\n[Chaos Monkey REPL] $ ")
 }
 
 func REPL() {
