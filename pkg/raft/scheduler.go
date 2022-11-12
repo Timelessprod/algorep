@@ -112,6 +112,37 @@ func (node *SchedulerNode) handleStartCommand() {
 	}
 }
 
+func (node *SchedulerNode) handleCrashCommand() {
+	if node.IsCrashed {
+		logger.Debug("Node already crashed",
+			zap.String("Node", node.Card.String()),
+		)
+		return
+	} else {
+		node.IsCrashed = true
+	}
+}
+
+func (node *SchedulerNode) handleSynchronizeCommand(request RequestCommandRPC) {
+	if node.IsCrashed {
+		logger.Debug("Node is crashed. Ignore synchronize command",
+			zap.String("Node", node.Card.String()),
+		)
+		return
+	}
+	// TODO
+}
+
+func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
+	if node.IsCrashed {
+		logger.Debug("Node is crashed. Ignore AppendEntry command",
+			zap.String("Node", node.Card.String()),
+		)
+		return
+	}
+	// TODO
+}
+
 // Handle Request Command RPC
 func (node *SchedulerNode) handleRequestCommandRPC(request RequestCommandRPC) {
 	logger.Debug("Handle Request Command RPC",
@@ -121,13 +152,13 @@ func (node *SchedulerNode) handleRequestCommandRPC(request RequestCommandRPC) {
 	)
 	switch request.CommandType {
 	case SynchronizeCommand:
-		// TODO
+		node.handleSynchronizeCommand(request)
 	case AppendEntryCommand:
-		// TODO
+		node.handleAppendEntryCommand(request)
 	case StartCommand:
 		node.handleStartCommand()
 	case CrashCommand:
-		// TODO
+		node.handleCrashCommand()
 	case RecoverCommand:
 		// TODO
 	}

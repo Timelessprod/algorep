@@ -5,6 +5,7 @@ import "time"
 var Config = struct {
 	SchedulerNodeCount          uint32
 	ChannelBufferSize           uint32
+	NodeSpeedList			   []time.Duration
 	NodeChannelMap              map[NodeType][]*ChannelContainer
 	MinElectionTimeout          time.Duration
 	MaxElectionTimeout          time.Duration

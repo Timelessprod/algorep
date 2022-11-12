@@ -22,6 +22,7 @@ func main() {
 		node.Init(i)
 
 		raft.Config.NodeChannelMap[raft.SchedulerNodeType] = append(raft.Config.NodeChannelMap[raft.SchedulerNodeType], &node.Channel)
+		raft.Config.NodeSpeedList = append(raft.Config.NodeSpeedList, raft.HighNodeSpeed)
 
 		go node.Run(&wg)
 	}

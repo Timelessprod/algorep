@@ -6,9 +6,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/Timelessprod/algorep/pkg/logging"
 	"github.com/Timelessprod/algorep/pkg/raft"
+	"go.uber.org/zap"
 )
+
+var logger *zap.Logger = logging.Logger
 
 type ClientNode struct {
 	Id       uint32
@@ -38,8 +43,15 @@ func (client *ClientNode) handleCrashCommand(tokenList []string) {
 		fmt.Println(err)
 		return
 	}
-	//TODO : handle the crash command
-	fmt.Println("CRASH", nodeId)
+	fmt.Print("Crashing the node ", nodeId, "... ")
+	logger.Warn("Crash a node", zap.Uint32("nodeId", nodeId))
+	request := raft.RequestCommandRPC{
+		FromNode:    client.NodeCard,
+		ToNode:      raft.NodeCard{Id: nodeId, Type: raft.SchedulerNodeType},
+		CommandType: raft.CrashCommand,
+	}
+	raft.Config.NodeChannelMap[raft.SchedulerNodeType][nodeId].RequestCommand <- request
+	fmt.Println("Done.")
 }
 
 func (client *ClientNode) handleSpeedCommand(tokenList []string) {
@@ -49,14 +61,14 @@ func (client *ClientNode) handleSpeedCommand(tokenList []string) {
 	}
 	levelToken := strings.ToLower(tokenList[1])
 
-	var level SpeedCommandType
+	var latency time.Duration
 	switch levelToken {
 	case LOW_SPEED.String():
-		level = LOW_SPEED
+		latency = raft.LowNodeSpeed
 	case MEDIUM_SPEED.String():
-		level = MEDIUM_SPEED
+		latency = raft.MediumNodeSpeed
 	case HIGH_SPEED.String():
-		level = HIGH_SPEED
+		latency = raft.HighNodeSpeed
 	default:
 		fmt.Println(INVALID_SPEED_LEVEL_MESSAGE)
 		fmt.Println(SPEED_COMMAND_USAGE)
@@ -68,8 +80,14 @@ func (client *ClientNode) handleSpeedCommand(tokenList []string) {
 		fmt.Println(err)
 		return
 	}
-	//TODO : handle the speed command
-	fmt.Println("SPEED", level, nodeId)
+	fmt.Print("Setting speed to ", levelToken, " for node ", nodeId, "... ")
+	logger.Info("Change Speed for a node",
+		zap.Uint32("nodeId", nodeId),
+		zap.String("speed", levelToken),
+		zap.Duration("latency", latency),
+	)
+	raft.Config.NodeSpeedList[nodeId] = latency
+	fmt.Println("Done.")
 }
 
 func (client *ClientNode) handleStartCommand() {
@@ -103,7 +121,7 @@ func (client *ClientNode) handleCommand(command string) {
 	case START_COMMAND.String():
 		client.handleStartCommand()
 	case STOP_COMMAND.String():
-		fmt.Println("STOP")
+		fmt.Println("Stopping all nodes...")
 		os.Exit(0)
 	case HELP_COMMAND.String():
 		fmt.Println(HELP_MESSAGE)

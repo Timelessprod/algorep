@@ -2,6 +2,7 @@ package raft
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Timelessprod/algorep/pkg/logging"
 	"go.uber.org/zap"
@@ -15,6 +16,12 @@ const (
 	ClientNodeType    NodeType = "Client"
 	SchedulerNodeType NodeType = "Scheduler"
 	WorkerNodeType    NodeType = "Worker"
+)
+
+const (
+	LowNodeSpeed   time.Duration = 100 * time.Millisecond
+	MediumNodeSpeed time.Duration = 25 * time.Millisecond
+	HighNodeSpeed   time.Duration = 5 * time.Millisecond
 )
 
 func (n NodeType) String() string {
