@@ -114,12 +114,23 @@ func (node *SchedulerNode) handleStartCommand() {
 
 func (node *SchedulerNode) handleCrashCommand() {
 	if node.IsCrashed {
-		logger.Debug("Node already crashed",
+		logger.Debug("Node is already crashed",
 			zap.String("Node", node.Card.String()),
 		)
 		return
 	} else {
 		node.IsCrashed = true
+	}
+}
+
+func (node *SchedulerNode) handleRecoverCommand() {
+	if node.IsCrashed {
+		node.IsCrashed = false
+	} else {
+		logger.Debug("Node is not crashed",
+			zap.String("Node", node.Card.String()),
+		)
+		return
 	}
 }
 
@@ -160,7 +171,7 @@ func (node *SchedulerNode) handleRequestCommandRPC(request RequestCommandRPC) {
 	case CrashCommand:
 		node.handleCrashCommand()
 	case RecoverCommand:
-		// TODO
+		node.handleRecoverCommand()
 	}
 }
 

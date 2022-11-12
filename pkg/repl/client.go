@@ -54,6 +54,27 @@ func (client *ClientNode) handleCrashCommand(tokenList []string) {
 	fmt.Println("Done.")
 }
 
+func (client *ClientNode) handleRecoverCommand(tokenList []string) {
+	if len(tokenList) != 2 {
+		fmt.Println(RECOVER_COMMAND_USAGE)
+		return
+	}
+	nodeId, err := client.parseNodeNumber(tokenList[1])
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Print("Recovering the node ", nodeId, "... ")
+	logger.Warn("Recover a node", zap.Uint32("nodeId", nodeId))
+	request := raft.RequestCommandRPC{
+		FromNode:    client.NodeCard,
+		ToNode:      raft.NodeCard{Id: nodeId, Type: raft.SchedulerNodeType},
+		CommandType: raft.RecoverCommand,
+	}
+	raft.Config.NodeChannelMap[raft.SchedulerNodeType][nodeId].RequestCommand <- request
+	fmt.Println("Done.")
+}
+
 func (client *ClientNode) handleSpeedCommand(tokenList []string) {
 	if len(tokenList) != 3 {
 		fmt.Println(SPEED_COMMAND_USAGE)
@@ -118,6 +139,8 @@ func (client *ClientNode) handleCommand(command string) {
 		client.handleSpeedCommand(tokenList)
 	case CRASH_COMMAND.String():
 		client.handleCrashCommand(tokenList)
+	case RECOVER_COMMAND.String():
+		client.handleRecoverCommand(tokenList)
 	case START_COMMAND.String():
 		client.handleStartCommand()
 	case STOP_COMMAND.String():
