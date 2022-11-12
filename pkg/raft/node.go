@@ -1,6 +1,8 @@
 package raft
 
 import (
+	"fmt"
+
 	"github.com/Timelessprod/algorep/pkg/logging"
 	"go.uber.org/zap"
 )
@@ -15,6 +17,10 @@ const (
 	WorkerNodeType    NodeType = "Worker"
 )
 
+func (n NodeType) String() string {
+	return string(n)
+}
+
 type ChannelContainer struct {
 	RequestCommand  chan RequestCommandRPC
 	ResponseCommand chan ResponseCommandRPC
@@ -26,4 +32,8 @@ type ChannelContainer struct {
 type NodeCard struct {
 	Id   uint32
 	Type NodeType
+}
+
+func (n NodeCard) String() string {
+	return fmt.Sprint(n.Type.String(), " - ", n.Id)
 }

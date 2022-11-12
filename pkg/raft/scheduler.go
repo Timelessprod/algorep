@@ -22,6 +22,7 @@ func (s State) String() string {
 
 type SchedulerNode struct {
 	Id          uint32
+	Card        NodeCard
 	State       State
 	CurrentTerm uint32
 
@@ -38,6 +39,7 @@ type SchedulerNode struct {
 
 func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 	node.Id = id
+	node.Card = NodeCard{Id: id, Type: SchedulerNodeType}
 	node.State = FollowerState
 	node.VotedFor = -1
 	node.VoteCount = 0
@@ -64,7 +66,7 @@ func (node *SchedulerNode) getTimeOut() time.Duration {
 	case LeaderState:
 		return Config.IsAliveNotificationInterval
 	}
-	logger.Panic("Invalid node state", zap.Uint32("id", node.Id), zap.Int("state", int(node.State)))
+	logger.Panic("Invalid node state", zap.String("Node", node.Card.String()), zap.Int("state", int(node.State)))
 	panic("Invalid node state")
 }
 
@@ -73,8 +75,8 @@ func (node *SchedulerNode) broadcastRequestVote() {
 		if i != node.Id {
 			channel := Config.NodeChannelMap[SchedulerNodeType][i].RequestVote
 			request := RequestVoteRPC{
-				FromNode:    node.Id,
-				ToNode:      i,
+				FromNode:    node.Card,
+				ToNode:      NodeCard{Id: i, Type: SchedulerNodeType},
 				Term:        node.CurrentTerm,
 				CandidateId: node.Id,
 			}
@@ -84,7 +86,7 @@ func (node *SchedulerNode) broadcastRequestVote() {
 }
 
 func (node *SchedulerNode) startNewElection() {
-	logger.Info("Start new election", zap.Uint32("id", node.Id))
+	logger.Info("Start new election", zap.String("Node", node.Card.String()))
 	node.State = CandidateState
 	node.VoteCount = 1
 	node.CurrentTerm++
@@ -99,8 +101,8 @@ func (node *SchedulerNode) startNewElection() {
 // Handle Request Command RPC
 func (node *SchedulerNode) handleRequestCommandRPC(request RequestCommandRPC) {
 	logger.Debug("Handle Request Command RPC",
-		zap.Uint32("FromNode", request.FromNode),
-		zap.Uint32("ToNode", request.ToNode),
+		zap.String("FromNode", request.FromNode.String()),
+		zap.String("ToNode", request.ToNode.String()),
 		zap.String("CommandType", request.CommandType.String()),
 	)
 	//TODO Manage command (add Entry/Sync log / conflict resolution / success / failure)
@@ -109,8 +111,8 @@ func (node *SchedulerNode) handleRequestCommandRPC(request RequestCommandRPC) {
 // Handle Response Command RPC
 func (node *SchedulerNode) handleResponseCommandRPC(response ResponseCommandRPC) {
 	logger.Debug("Handle Response Command RPC",
-		zap.Uint32("FromNode", response.FromNode),
-		zap.Uint32("ToNode", response.ToNode),
+		zap.String("FromNode", response.FromNode.String()),
+		zap.String("ToNode", response.ToNode.String()),
 		zap.Uint32("term", response.Term),
 		zap.Bool("success", response.Success),
 	)
@@ -120,11 +122,11 @@ func (node *SchedulerNode) handleResponseCommandRPC(response ResponseCommandRPC)
 // Handle Request Vote RPC
 func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
 	logger.Debug("Handle Request Vote RPC",
-		zap.Uint32("FromNode", request.FromNode),
-		zap.Uint32("ToNode", request.ToNode),
+		zap.String("FromNode", request.FromNode.String()),
+		zap.String("ToNode", request.ToNode.String()),
 		zap.Int("CandidateId", int(request.CandidateId)),
 	)
-	channel := Config.NodeChannelMap[SchedulerNodeType][request.FromNode].ResponseVote
+	channel := Config.NodeChannelMap[SchedulerNodeType][request.FromNode.Id].ResponseVote
 	response := ResponseVoteRPC{
 		FromNode:    request.ToNode,
 		ToNode:      request.FromNode,
@@ -134,7 +136,7 @@ func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
 
 	if node.CurrentTerm < request.Term {
 		logger.Debug("Candidate term is higher than current term. Vote granted !",
-			zap.Uint32("id", node.Id),
+			zap.String("id", node.Card.String()),
 			zap.Uint32("candidateTerm", request.Term),
 			zap.Uint32("currentTerm", node.CurrentTerm),
 		)
@@ -150,13 +152,13 @@ func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
 // Handle Response Vote RPC
 func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 	logger.Debug("Handle Response Vote RPC",
-		zap.Uint32("FromNode", response.FromNode),
-		zap.Uint32("ToNode", response.ToNode),
-		zap.Int("CandidateId", int(response.ToNode)),
+		zap.String("FromNode", response.FromNode.String()),
+		zap.String("ToNode", response.ToNode.String()),
+		zap.Int("CandidateId", int(response.ToNode.Id)),
 	)
 	if node.State != CandidateState {
 		logger.Debug("Node is not a candidate. Ignore response vote RPC",
-			zap.Uint32("id", node.Id),
+			zap.String("Node", node.Card.String()),
 			zap.String("state", node.State.String()),
 		)
 	} else {
@@ -164,12 +166,12 @@ func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 			node.VoteCount++
 			if node.VoteCount > Config.SchedulerNodeCount/2 {
 				node.State = LeaderState
-				logger.Info("Leader elected", zap.Uint32("id", node.Id))
+				logger.Info("Leader elected", zap.String("Node", node.Card.String()))
 				return
 			}
 		} else {
 			logger.Warn("Vote not granted",
-				zap.Uint32("id", node.Id),
+				zap.String("Node", node.Card.String()),
 				zap.Uint32("ResponseTerm", response.Term),
 				zap.Uint32("NodeTerm", node.CurrentTerm),
 			)
@@ -187,8 +189,8 @@ func (node *SchedulerNode) broadcastSynchronizeCommandRPC() {
 		if i != node.Id {
 			channel := Config.NodeChannelMap[SchedulerNodeType][i].RequestCommand
 			request := RequestCommandRPC{
-				FromNode:    node.Id,
-				ToNode:      i,
+				FromNode:    node.Card,
+				ToNode:      NodeCard{Id: i, Type: SchedulerNodeType},
 				Term:        node.CurrentTerm,
 				CommandType: Synchronize,
 			}
@@ -200,13 +202,13 @@ func (node *SchedulerNode) broadcastSynchronizeCommandRPC() {
 func (node *SchedulerNode) handleTimeout() {
 	switch node.State {
 	case FollowerState:
-		logger.Warn("Leader does not respond", zap.Uint32("id", node.Id), zap.Duration("electionTimeout", node.ElectionTimeout))
+		logger.Warn("Leader does not respond", zap.String("Node", node.Card.String()), zap.Duration("electionTimeout", node.ElectionTimeout))
 		node.startNewElection()
 	case CandidateState:
-		logger.Warn("Too much time to get a majority vote", zap.Uint32("id", node.Id), zap.Duration("electionTimeout", node.ElectionTimeout))
+		logger.Warn("Too much time to get a majority vote", zap.String("Node", node.Card.String()), zap.Duration("electionTimeout", node.ElectionTimeout))
 		node.startNewElection()
 	case LeaderState:
-		logger.Info("It's time for the Leader to send an IsAlive notification to followers", zap.Uint32("id", node.Id))
+		logger.Info("It's time for the Leader to send an IsAlive notification to followers", zap.String("Node", node.Card.String()))
 		node.broadcastSynchronizeCommandRPC()
 	}
 }
@@ -217,9 +219,9 @@ func (node *SchedulerNode) handleTimeout() {
 
 func (node *SchedulerNode) Run(wg *sync.WaitGroup) {
 	defer wg.Done()
-	logger.Info("Node is waiting the START command from REPL", zap.Uint32("id", node.Id))
+	logger.Info("Node is waiting the START command from REPL", zap.String("Node", node.Card.String()))
 	// TODO wait for the start command from REPL and listen to the channel RequestCommand
-	logger.Info("Node started", zap.Uint32("id", node.Id))
+	logger.Info("Node started", zap.String("Node", node.Card.String()))
 
 	for {
 		select {

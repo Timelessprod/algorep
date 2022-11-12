@@ -14,8 +14,8 @@ func (c CommandType) String() string {
 }
 
 type RequestCommandRPC struct {
-	FromNode uint32
-	ToNode   uint32
+	FromNode NodeCard
+	ToNode   NodeCard
 
 	Term        uint32
 	CommandType CommandType
@@ -23,8 +23,8 @@ type RequestCommandRPC struct {
 }
 
 type ResponseCommandRPC struct {
-	FromNode uint32
-	ToNode   uint32
+	FromNode NodeCard
+	ToNode   NodeCard
 
 	Term       uint32
 	Success    bool
@@ -34,16 +34,16 @@ type ResponseCommandRPC struct {
 /*** Vote ***/
 
 type RequestVoteRPC struct {
-	FromNode uint32
-	ToNode   uint32
+	FromNode NodeCard
+	ToNode   NodeCard
 
 	Term        uint32
 	CandidateId uint32
 }
 
 type ResponseVoteRPC struct {
-	FromNode uint32
-	ToNode   uint32
+	FromNode NodeCard
+	ToNode   NodeCard
 
 	Term        uint32
 	VoteGranted bool
