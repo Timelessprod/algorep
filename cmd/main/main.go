@@ -27,7 +27,11 @@ func main() {
 	}
 
 	// Run interactive console
-	go repl.REPL()
+	client := repl.ClientNode{}
+	client.Init(0)
+	raft.Config.NodeChannelMap[raft.ClientNodeType] = append(raft.Config.NodeChannelMap[raft.ClientNodeType], &client.Channel)
+	go client.Run()
+
 	// Wait for all nodes to finish
 	wg.Wait()
 }

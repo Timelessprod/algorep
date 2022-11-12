@@ -5,12 +5,15 @@ package raft
 type CommandType int
 
 const (
-	Synchronize = iota
-	AppendEntry
+	SynchronizeCommand = iota
+	AppendEntryCommand
+	StartCommand
+	CrashCommand
+	RecoverCommand
 )
 
 func (c CommandType) String() string {
-	return [...]string{"Synchronize", "AppendEntry"}[c]
+	return [...]string{"Synchronize", "AppendEntry", "Start", "Crash", "Recover"}[c]
 }
 
 type RequestCommandRPC struct {

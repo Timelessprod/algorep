@@ -31,6 +31,9 @@ type SchedulerNode struct {
 	VoteCount       uint32
 
 	Channel ChannelContainer
+
+	IsStarted bool
+	IsCrashed bool
 }
 
 /*************
@@ -121,6 +124,13 @@ func (node *SchedulerNode) handleResponseCommandRPC(response ResponseCommandRPC)
 
 // Handle Request Vote RPC
 func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
+	if node.IsCrashed {
+		logger.Debug("Node is crashed. Ignore request vote RPC",
+			zap.String("FromNode", request.FromNode.String()),
+			zap.String("ToNode", request.ToNode.String()),
+		)
+		return
+	}
 	logger.Debug("Handle Request Vote RPC",
 		zap.String("FromNode", request.FromNode.String()),
 		zap.String("ToNode", request.ToNode.String()),
@@ -151,6 +161,13 @@ func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
 
 // Handle Response Vote RPC
 func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
+	if node.IsCrashed {
+		logger.Debug("Node is crashed. Ignore request vote RPC",
+			zap.String("FromNode", response.FromNode.String()),
+			zap.String("ToNode", response.ToNode.String()),
+		)
+		return
+	}
 	logger.Debug("Handle Response Vote RPC",
 		zap.String("FromNode", response.FromNode.String()),
 		zap.String("ToNode", response.ToNode.String()),
@@ -192,7 +209,7 @@ func (node *SchedulerNode) broadcastSynchronizeCommandRPC() {
 				FromNode:    node.Card,
 				ToNode:      NodeCard{Id: i, Type: SchedulerNodeType},
 				Term:        node.CurrentTerm,
-				CommandType: Synchronize,
+				CommandType: SynchronizeCommand,
 			}
 			channel <- request
 		}
@@ -200,6 +217,10 @@ func (node *SchedulerNode) broadcastSynchronizeCommandRPC() {
 }
 
 func (node *SchedulerNode) handleTimeout() {
+	if node.IsCrashed {
+		logger.Debug("Node is crashed. Ignore timeout", zap.String("Node", node.Card.String()))
+		return
+	}
 	switch node.State {
 	case FollowerState:
 		logger.Warn("Leader does not respond", zap.String("Node", node.Card.String()), zap.Duration("electionTimeout", node.ElectionTimeout))
@@ -220,7 +241,13 @@ func (node *SchedulerNode) handleTimeout() {
 func (node *SchedulerNode) Run(wg *sync.WaitGroup) {
 	defer wg.Done()
 	logger.Info("Node is waiting the START command from REPL", zap.String("Node", node.Card.String()))
-	// TODO wait for the start command from REPL and listen to the channel RequestCommand
+	// Wait for the start command from REPL and listen to the channel RequestCommand
+	for !node.IsStarted {
+		select {
+		case request := <-node.Channel.RequestCommand:
+			node.handleRequestCommandRPC(request)
+		}
+	}
 	logger.Info("Node started", zap.String("Node", node.Card.String()))
 
 	for {
