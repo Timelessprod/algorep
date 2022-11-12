@@ -11,13 +11,12 @@ import (
 
 var logger *zap.Logger = logging.Logger
 
-
 type NodeType string
 
 const (
-	ClientNodeType NodeType = "Client"
+	ClientNodeType    NodeType = "Client"
 	SchedulerNodeType NodeType = "Scheduler"
-	WorkerNodeType NodeType = "Worker"
+	WorkerNodeType    NodeType = "Worker"
 )
 
 type ChannelContainer struct {
@@ -89,7 +88,7 @@ func (node *Node) getTimeOut() time.Duration {
 }
 
 func (node *Node) broadcastRequestVote() {
-	for i := uint32(0); i < Config.NodeCount; i++ {
+	for i := uint32(0); i < Config.SchedulerNodeCount; i++ {
 		if i != node.Id {
 			channel := Config.NodeChannelMap[SchedulerNodeType][i].RequestVote
 			request := RequestVoteRPC{
@@ -182,7 +181,7 @@ func (node *Node) handleResponseVoteRPC(response ResponseVoteRPC) {
 	} else {
 		if response.VoteGranted {
 			node.VoteCount++
-			if node.VoteCount > Config.NodeCount/2 {
+			if node.VoteCount > Config.SchedulerNodeCount/2 {
 				node.State = LeaderState
 				logger.Info("Leader elected", zap.Uint32("id", node.Id))
 				return
@@ -203,7 +202,7 @@ func (node *Node) handleResponseVoteRPC(response ResponseVoteRPC) {
 
 // Handle Is Alive Notification RPC
 func (node *Node) broadcastSynchronizeCommandRPC() {
-	for i := uint32(0); i < Config.NodeCount; i++ {
+	for i := uint32(0); i < Config.SchedulerNodeCount; i++ {
 		if i != node.Id {
 			channel := Config.NodeChannelMap[SchedulerNodeType][i].RequestCommand
 			request := RequestCommandRPC{

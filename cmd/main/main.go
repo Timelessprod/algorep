@@ -16,7 +16,7 @@ func main() {
 	defer logger.Sync()
 
 	// Create nodes
-	for i := uint32(0); i < raft.Config.NodeCount; i++ {
+	for i := uint32(0); i < raft.Config.SchedulerNodeCount; i++ {
 		wg.Add(1)
 		node := raft.Node{}
 		node.Init(i)

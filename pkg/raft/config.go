@@ -3,16 +3,16 @@ package raft
 import "time"
 
 var Config = struct {
-	NodeCount                   uint32
+	SchedulerNodeCount          uint32
 	ChannelBufferSize           uint32
 	NodeChannelMap              map[NodeType][]*ChannelContainer
 	MinElectionTimeout          time.Duration
 	MaxElectionTimeout          time.Duration
 	IsAliveNotificationInterval time.Duration
 }{
-	NodeCount:         5,
-	ChannelBufferSize: 100,
-	NodeChannelMap:    InitNodeChannelMap(),
+	SchedulerNodeCount: 5,
+	ChannelBufferSize:  100,
+	NodeChannelMap:     InitNodeChannelMap(),
 	// Range of time to wait for a leader heartbeat or granting vote to candidate
 	MinElectionTimeout: 150 * time.Millisecond,
 	MaxElectionTimeout: 300 * time.Millisecond,
