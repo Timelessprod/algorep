@@ -5,6 +5,7 @@ import (
 
 	"github.com/Timelessprod/algorep/pkg/logging"
 	"github.com/Timelessprod/algorep/pkg/raft"
+	"github.com/Timelessprod/algorep/pkg/repl"
 	"go.uber.org/zap"
 )
 
@@ -15,15 +16,23 @@ func main() {
 	defer logger.Sync()
 
 	// Create nodes
-	for i := uint32(0); i < raft.Config.NodeCount; i++ {
+	for i := uint32(0); i < raft.Config.SchedulerNodeCount; i++ {
 		wg.Add(1)
-		node := raft.Node{}
+		node := raft.SchedulerNode{}
 		node.Init(i)
 
-		raft.Config.NodeChannelList = append(raft.Config.NodeChannelList, &node.Channel)
+		raft.Config.NodeChannelMap[raft.SchedulerNodeType] = append(raft.Config.NodeChannelMap[raft.SchedulerNodeType], &node.Channel)
+		raft.Config.NodeSpeedList = append(raft.Config.NodeSpeedList, raft.HighNodeSpeed)
 
 		go node.Run(&wg)
 	}
 
+	// Run interactive console
+	client := repl.ClientNode{}
+	client.Init(0)
+	raft.Config.NodeChannelMap[raft.ClientNodeType] = append(raft.Config.NodeChannelMap[raft.ClientNodeType], &client.Channel)
+	go client.Run()
+
+	// Wait for all nodes to finish
 	wg.Wait()
 }

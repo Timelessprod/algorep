@@ -5,17 +5,24 @@ package raft
 type CommandType int
 
 const (
-	Synchronize = iota
-	AppendEntry
+	SynchronizeCommand = iota
+	AppendEntryCommand
+	StartCommand
+	CrashCommand
+	RecoverCommand
 )
 
 func (c CommandType) String() string {
-	return [...]string{"Synchronize", "AppendEntry"}[c]
+	return [...]string{"Synchronize", "AppendEntry", "Start", "Crash", "Recover"}[c]
+}
+
+type RPCType interface {
+	RequestCommandRPC | ResponseCommandRPC | RequestVoteRPC | ResponseVoteRPC
 }
 
 type RequestCommandRPC struct {
-	FromNode uint32
-	ToNode   uint32
+	FromNode NodeCard
+	ToNode   NodeCard
 
 	Term        uint32
 	CommandType CommandType
@@ -23,8 +30,8 @@ type RequestCommandRPC struct {
 }
 
 type ResponseCommandRPC struct {
-	FromNode uint32
-	ToNode   uint32
+	FromNode NodeCard
+	ToNode   NodeCard
 
 	Term       uint32
 	Success    bool
@@ -34,16 +41,16 @@ type ResponseCommandRPC struct {
 /*** Vote ***/
 
 type RequestVoteRPC struct {
-	FromNode uint32
-	ToNode   uint32
+	FromNode NodeCard
+	ToNode   NodeCard
 
 	Term        uint32
 	CandidateId uint32
 }
 
 type ResponseVoteRPC struct {
-	FromNode uint32
-	ToNode   uint32
+	FromNode NodeCard
+	ToNode   NodeCard
 
 	Term        uint32
 	VoteGranted bool
