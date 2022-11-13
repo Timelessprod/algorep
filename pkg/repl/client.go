@@ -16,8 +16,10 @@ import (
 var logger *zap.Logger = logging.Logger
 
 type ClientNode struct {
-	Id       uint32
-	NodeCard raft.NodeCard
+	Id               uint32
+	NodeCard         raft.NodeCard
+	LastLeaderId     uint32
+	ClusterIsStarted bool
 
 	Channel raft.ChannelContainer
 }
@@ -31,6 +33,25 @@ func (client *ClientNode) parseNodeNumber(token string) (uint32, error) {
 		return 0, fmt.Errorf("Node number should be between 0 and %d", raft.Config.SchedulerNodeCount-1)
 	}
 	return uint32(nodeId), nil
+}
+
+func (client *ClientNode) handleSubmitCommand(tokens []string) {
+	if len(tokens) != 2 {
+		fmt.Println(SUBMIT_COMMAND_USAGE)
+		return
+	}
+
+	if !client.ClusterIsStarted {
+		fmt.Println(NOT_STARTED_MESSAGE)
+		return
+	}
+
+	jobFilePath := tokens[1]
+	fmt.Print("Submitting job ", jobFilePath, "... ")
+	//TODO : check path and read file
+	//TODO : send job to leader
+	//TODO : read response
+	fmt.Println("Done.")
 }
 
 func (client *ClientNode) handleCrashCommand(tokenList []string) {
@@ -113,6 +134,7 @@ func (client *ClientNode) handleSpeedCommand(tokenList []string) {
 
 func (client *ClientNode) handleStartCommand() {
 	fmt.Print("Starting all nodes... ")
+	client.ClusterIsStarted = true
 	for index, channelContainer := range raft.Config.NodeChannelMap[raft.SchedulerNodeType] {
 		request := raft.RequestCommandRPC{
 			FromNode:    client.NodeCard,
@@ -143,6 +165,8 @@ func (client *ClientNode) handleCommand(command string) {
 		client.handleRecoverCommand(tokenList)
 	case START_COMMAND.String():
 		client.handleStartCommand()
+	case SUBMIT_COMMAND.String():
+		client.handleSubmitCommand(tokenList)
 	case STOP_COMMAND.String():
 		fmt.Println("Stopping all nodes...")
 		os.Exit(0)
@@ -165,6 +189,8 @@ func (client *ClientNode) Init(id uint32) {
 		RequestCommand:  make(chan raft.RequestCommandRPC, raft.Config.ChannelBufferSize),
 		ResponseCommand: make(chan raft.ResponseCommandRPC, raft.Config.ChannelBufferSize),
 	}
+	client.LastLeaderId = 0 // Valeur par défaut le temps de trouver le leader
+	client.ClusterIsStarted = false
 }
 
 func (client *ClientNode) Run() {

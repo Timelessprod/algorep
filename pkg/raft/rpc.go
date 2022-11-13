@@ -33,9 +33,11 @@ type ResponseCommandRPC struct {
 	FromNode NodeCard
 	ToNode   NodeCard
 
-	Term       uint32
-	Success    bool
-	MatchIndex uint32
+	Term        uint32
+	CommandType CommandType
+	Message     string
+	Success     bool
+	MatchIndex  uint32
 }
 
 /*** Vote ***/

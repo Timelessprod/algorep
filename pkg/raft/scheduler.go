@@ -16,6 +16,8 @@ const (
 	LeaderState
 )
 
+const NO_LEADER = -1
+
 func (s State) String() string {
 	return [...]string{"Follower", "Candidate", "Leader"}[s]
 }
@@ -25,6 +27,7 @@ type SchedulerNode struct {
 	Card        NodeCard
 	State       State
 	CurrentTerm uint32
+	LeaderId    int32
 
 	VotedFor        int32
 	ElectionTimeout time.Duration
@@ -44,7 +47,8 @@ func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 	node.Id = id
 	node.Card = NodeCard{Id: id, Type: SchedulerNodeType}
 	node.State = FollowerState
-	node.VotedFor = -1
+	node.LeaderId = NO_LEADER
+	node.VotedFor = NO_LEADER
 	node.VoteCount = 0
 
 	// Compute random leaderIsAliveTimeout
@@ -141,7 +145,60 @@ func (node *SchedulerNode) handleSynchronizeCommand(request RequestCommandRPC) {
 		)
 		return
 	}
-	// TODO
+	response := ResponseCommandRPC{
+		FromNode:    node.Card,
+		ToNode:      request.FromNode,
+		CommandType: request.CommandType,
+	}
+	channel := Config.NodeChannelMap[request.FromNode.Type][request.FromNode.Id].ResponseCommand
+
+	// Si request term < current term (sync pas à jours), alors on ignore et on répond false
+	if request.Term < node.CurrentTerm {
+		logger.Debug("Ignore synchronize command because request term < current term",
+			zap.String("Node", node.Card.String()),
+			zap.Uint32("request term", request.Term),
+			zap.Uint32("current term", node.CurrentTerm),
+		)
+		response.Success = false
+		channel <- response
+		return
+	}
+
+	// Si node.State != follower et donc implicitement request term >= current term
+	// alors la node devient follower
+	if node.State != FollowerState {
+		logger.Info("Node become Follower",
+			zap.String("Node", node.Card.String()),
+		)
+		node.State = FollowerState
+	}
+
+	// Si request term > current term, alors on met à jour current term
+	if request.Term > node.CurrentTerm {
+		logger.Info("Update current term",
+			zap.String("Node", node.Card.String()),
+			zap.Uint32("new (request term)", request.Term),
+			zap.Uint32("old (current term)", node.CurrentTerm),
+		)
+		node.CurrentTerm = request.Term
+	}
+
+	// Seul le leader peut envoyer des commandes Sync donc on met à jour leaderId
+	node.LeaderId = int32(request.FromNode.Id)
+
+	// TODO : Synchronisation (à revoir)
+	// Si pas cohérence des derniers logs
+	// ==> response.Success = false
+	// ==>Si conflit avec un entry existant et un nouveau,
+	// ====> on supprime l'entry existant et tous les suivants
+	// ==> On répond avec le dernier index de l'entry valide
+
+	// Sinon
+	// => on ajoute la nouvel entry
+	// => commit l'index indiqué par la requete
+	// Reponse avec success = true
+	response.Success = true // Temporaire si pas de conflit
+	channel <- response
 }
 
 func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
@@ -184,6 +241,7 @@ func (node *SchedulerNode) handleResponseCommandRPC(response ResponseCommandRPC)
 		zap.Bool("success", response.Success),
 	)
 	//TODO if majority of success, commit
+	//TODO Sync les autres followers si necessaire
 }
 
 // Handle Request Vote RPC

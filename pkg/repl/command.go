@@ -6,6 +6,7 @@ const (
 	SPEED_COMMAND   CommandType = "SPEED"
 	CRASH_COMMAND   CommandType = "CRASH"
 	START_COMMAND   CommandType = "START"
+	SUBMIT_COMMAND  CommandType = "SUBMIT"
 	STOP_COMMAND    CommandType = "STOP"
 	RECOVER_COMMAND CommandType = "RECOVER"
 	HELP_COMMAND    CommandType = "HELP"
@@ -33,11 +34,14 @@ const (
 	- CRASH <node number> : crash a node. For example: 'CRASH 2' will crash node 2.
 	- RECOVER <node number> : recover a crashed node. For example: 'RECOVER 2' will recover node 2.
 	- START : start the cluster. You can use this command only once.
+	- SUBMIT <job file> : submit a job to the cluster. The cluster must be STARTed before. For example: 'SUBMIT job.json' will submit the job described in the file job.json.
 	- STOP : stop the cluster. This command will kill the program.
 	- HELP : display this message.`
 	SPEED_COMMAND_USAGE         = "The SPEED command must have the following form: `SPEED (low|medium|high) <node number>`. For example: 'SPEED high 2'"
 	CRASH_COMMAND_USAGE         = "The CRASH command must have the following form: `CRASH <node number>`. For example: 'CRASH 2'"
+	SUBMIT_COMMAND_USAGE        = "The SUBMIT command must have the following form: `SUBMIT <job file>`. For example: 'SUBMIT job.json'"
 	RECOVER_COMMAND_USAGE       = "The RECOVER command must have the following form: `RECOVER <node number>`. For example: 'RECOVER 2'"
 	INVALID_COMMAND_MESSAGE     = "Invalid command !"
 	INVALID_SPEED_LEVEL_MESSAGE = "Invalid speed level !"
+	NOT_STARTED_MESSAGE         = "Cluster is not started yet ! Run the START command first."
 )
