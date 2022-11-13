@@ -35,8 +35,8 @@ func (client *ClientNode) parseNodeNumber(token string) (uint32, error) {
 	return uint32(nodeId), nil
 }
 
-func (client *ClientNode) handleSubmitCommand(tokens []string) {
-	if len(tokens) != 2 {
+func (client *ClientNode) handleSubmitCommand(tokenList []string) {
+	if len(tokenList) != 2 {
 		fmt.Println(SUBMIT_COMMAND_USAGE)
 		return
 	}
@@ -46,7 +46,7 @@ func (client *ClientNode) handleSubmitCommand(tokens []string) {
 		return
 	}
 
-	jobFilePath := tokens[1]
+	jobFilePath := tokenList[1]
 	fmt.Print("Submitting job ", jobFilePath, "... ")
 	//TODO : check path and read file
 	//TODO : send job to leader
