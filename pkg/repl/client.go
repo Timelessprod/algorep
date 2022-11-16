@@ -2,6 +2,7 @@ package repl
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -33,6 +34,47 @@ func (client *ClientNode) parseNodeNumber(token string) (uint32, error) {
 		return 0, fmt.Errorf("Node number should be between 0 and %d", raft.Config.SchedulerNodeCount-1)
 	}
 	return uint32(nodeId), nil
+}
+
+func GetRandomSchedulerNodeId() uint32 {
+	return uint32(raft.RandomInt(0, int(raft.Config.SchedulerNodeCount)))
+}
+
+func (client *ClientNode) sendMessageToLeader(message raft.RequestCommandRPC) (*raft.ResponseCommandRPC, error) {
+	for i := 0; i < int(raft.Config.MaxRetryToFindLeader); i++ {
+		channel := raft.Config.NodeChannelMap[raft.SchedulerNodeType][client.LastLeaderId]
+		channel.RequestCommand <- message
+		select {
+		case response := <-channel.ResponseCommand:
+			// Check if node connected to is still leader
+			if response.LeaderId != client.LastLeaderId {
+				logger.Warn("Leader has changed", 
+					zap.Uint32("old", client.LastLeaderId), 
+					zap.Uint32("new", response.LeaderId),
+				)
+				client.LastLeaderId = response.LeaderId
+				continue
+			}
+			// If LeaderId given by node is -1
+			// it means that node does not know who is the leader
+			if response.LeaderId == raft.NO_LEADER {
+				logger.Warn("Leader is unknown. Check random node !", 
+					zap.Uint32("tested nodeId", client.LastLeaderId),
+				)
+				client.LastLeaderId = GetRandomSchedulerNodeId()
+				continue
+			}
+			// Else if the tested node is the leader 
+			return &response, nil
+		case <-time.After(raft.Config.MaxFindLeaderTimeout):
+			logger.Warn("Node is not responding, trying to find new leader with random node... Try n°", 
+				zap.Int("try", i+1),
+				zap.Uint32("tested nodeId", client.LastLeaderId),
+			)
+			client.LastLeaderId = GetRandomSchedulerNodeId()
+	}
+	logger.Error("No response from leader after several tries")
+	return nil, errors.New("No response from leader after several tries")
 }
 
 func (client *ClientNode) handleSubmitCommand(tokenList []string) {
