@@ -305,6 +305,7 @@ func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 			node.VoteCount++
 			if node.VoteCount > Config.SchedulerNodeCount/2 {
 				node.State = LeaderState
+				node.LeaderId = int32(node.Card.Id)
 				logger.Info("Leader elected", zap.String("Node", node.Card.String()))
 				return
 			}
