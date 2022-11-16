@@ -28,7 +28,18 @@ by the client at the end.
 
 ## C) Running our project
 
-Simply clone the repository and run `make` at its root.
+The project require Go version 1.18 or above. To install it, please run the
+following commands:
+```bash
+curl -OL https://go.dev/dl/go1.19.3.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf go1.19.3.linux-amd64.tar.gz
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+```
+
+You can check Go versions on the [go.dev](https://go.dev/dl/) website.
+
+Then you can simply clone the repository and run `make` at its root.
 
 ## D) Progression
 
