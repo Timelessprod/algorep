@@ -8,20 +8,11 @@ import (
 	"go.uber.org/zap"
 )
 
-type State int
+/********************
+ ** Scheduler Node **
+ ********************/
 
-const (
-	FollowerState = iota
-	CandidateState
-	LeaderState
-)
-
-const NO_LEADER = -1
-
-func (s State) String() string {
-	return [...]string{"Follower", "Candidate", "Leader"}[s]
-}
-
+// SchedulerNode is the node in charge of scheduling the database entries with the RAFT algorithm
 type SchedulerNode struct {
 	Id          uint32
 	Card        NodeCard
@@ -39,10 +30,7 @@ type SchedulerNode struct {
 	IsCrashed bool
 }
 
-/*************
- ** Methods **
- *************/
-
+// Init the scheduler node
 func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 	node.Id = id
 	node.Card = NodeCard{Id: id, Type: SchedulerNodeType}
@@ -64,6 +52,39 @@ func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 	return *node
 }
 
+// Run the scheduler node
+func (node *SchedulerNode) Run(wg *sync.WaitGroup) {
+	defer wg.Done()
+	logger.Info("Node is waiting the START command from REPL", zap.String("Node", node.Card.String()))
+	// Wait for the start command from REPL and listen to the channel RequestCommand
+	for !node.IsStarted {
+		select {
+		case request := <-node.Channel.RequestCommand:
+			node.handleRequestCommandRPC(request)
+		}
+	}
+	logger.Info("Node started", zap.String("Node", node.Card.String()))
+
+	for {
+		select {
+		case request := <-node.Channel.RequestCommand:
+			node.handleRequestCommandRPC(request)
+		case response := <-node.Channel.ResponseCommand:
+			node.handleResponseCommandRPC(response)
+		case request := <-node.Channel.RequestVote:
+			node.handleRequestVoteRPC(request)
+		case response := <-node.Channel.ResponseVote:
+			node.handleResponseVoteRPC(response)
+		case <-time.After(node.getTimeOut()):
+			node.handleTimeout()
+		}
+		time.Sleep(Config.NodeSpeedList[node.Id])
+	}
+}
+
+/*** MANAGE TIMEOUT ***/
+
+// getTimeOut returns the timeout duration depending on the node state
 func (node *SchedulerNode) getTimeOut() time.Duration {
 	switch node.State {
 	case FollowerState:
@@ -77,6 +98,28 @@ func (node *SchedulerNode) getTimeOut() time.Duration {
 	panic("Invalid node state")
 }
 
+// handleTimeout handles the timeout event
+func (node *SchedulerNode) handleTimeout() {
+	if node.IsCrashed {
+		logger.Debug("Node is crashed. Ignore timeout", zap.String("Node", node.Card.String()))
+		return
+	}
+	switch node.State {
+	case FollowerState:
+		logger.Warn("Leader does not respond", zap.String("Node", node.Card.String()), zap.Duration("electionTimeout", node.ElectionTimeout))
+		node.startNewElection()
+	case CandidateState:
+		logger.Warn("Too much time to get a majority vote", zap.String("Node", node.Card.String()), zap.Duration("electionTimeout", node.ElectionTimeout))
+		node.startNewElection()
+	case LeaderState:
+		logger.Info("It's time for the Leader to send an IsAlive notification to followers", zap.String("Node", node.Card.String()))
+		node.broadcastSynchronizeCommandRPC()
+	}
+}
+
+/*** BROADCASTING ***/
+
+// broadcastRequestVote broadcasts a RequestVote RPC to all the nodes (except itself)
 func (node *SchedulerNode) broadcastRequestVote() {
 	for i := uint32(0); i < Config.SchedulerNodeCount; i++ {
 		if i != node.Id {
@@ -92,6 +135,25 @@ func (node *SchedulerNode) broadcastRequestVote() {
 	}
 }
 
+// brodcastSynchronizeCommand sends a SynchronizeCommand to all nodes (except itself)
+func (node *SchedulerNode) broadcastSynchronizeCommandRPC() {
+	for i := uint32(0); i < Config.SchedulerNodeCount; i++ {
+		if i != node.Id {
+			channel := Config.NodeChannelMap[SchedulerNodeType][i].RequestCommand
+			request := RequestCommandRPC{
+				FromNode:    node.Card,
+				ToNode:      NodeCard{Id: i, Type: SchedulerNodeType},
+				Term:        node.CurrentTerm,
+				CommandType: SynchronizeCommand,
+			}
+			channel <- request
+		}
+	}
+}
+
+/*** CONFIGURATION COMMAND ***/
+
+// startElection starts an new election in sending a RequestVote RPC to all the nodes
 func (node *SchedulerNode) startNewElection() {
 	logger.Info("Start new election", zap.String("Node", node.Card.String()))
 	node.State = CandidateState
@@ -101,10 +163,7 @@ func (node *SchedulerNode) startNewElection() {
 	node.broadcastRequestVote()
 }
 
-/************
- ** Handle **
- ************/
-
+// handleStartCommand starts the node when it receives a StartCommand
 func (node *SchedulerNode) handleStartCommand() {
 	if node.IsStarted {
 		logger.Debug("Node already started",
@@ -116,6 +175,7 @@ func (node *SchedulerNode) handleStartCommand() {
 	}
 }
 
+// handleCrashCommand crashes the node when it receives a CrashCommand
 func (node *SchedulerNode) handleCrashCommand() {
 	if node.IsCrashed {
 		logger.Debug("Node is already crashed",
@@ -127,6 +187,7 @@ func (node *SchedulerNode) handleCrashCommand() {
 	}
 }
 
+// handleRecoversCommand recovers the node after crash when it receives a RecoverCommand
 func (node *SchedulerNode) handleRecoverCommand() {
 	if node.IsCrashed {
 		node.IsCrashed = false
@@ -138,6 +199,9 @@ func (node *SchedulerNode) handleRecoverCommand() {
 	}
 }
 
+/*** HANDLE RPC ***/
+
+// handleSynchronizeCommand handles the SynchronizeCommand to synchronize the entries and check if the leader is alive
 func (node *SchedulerNode) handleSynchronizeCommand(request RequestCommandRPC) {
 	if node.IsCrashed {
 		logger.Debug("Node is crashed. Ignore synchronize command",
@@ -201,6 +265,7 @@ func (node *SchedulerNode) handleSynchronizeCommand(request RequestCommandRPC) {
 	channel <- response
 }
 
+// handleAppendEntryCommand handles the AppendEntryCommand sent to the leader to append an entry to the log and ignore the command if the node is not the leader
 func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 	if node.IsCrashed {
 		logger.Debug("Node is crashed. Ignore AppendEntry command",
@@ -211,7 +276,7 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 	// TODO
 }
 
-// Handle Request Command RPC
+//  handleRequestCommandRPC handles the command RPC sent to the node
 func (node *SchedulerNode) handleRequestCommandRPC(request RequestCommandRPC) {
 	logger.Debug("Handle Request Command RPC",
 		zap.String("FromNode", request.FromNode.String()),
@@ -232,7 +297,7 @@ func (node *SchedulerNode) handleRequestCommandRPC(request RequestCommandRPC) {
 	}
 }
 
-// Handle Response Command RPC
+// handleResponseCommandRPC handles the response command RPC sent to the node
 func (node *SchedulerNode) handleResponseCommandRPC(response ResponseCommandRPC) {
 	logger.Debug("Handle Response Command RPC",
 		zap.String("FromNode", response.FromNode.String()),
@@ -244,7 +309,7 @@ func (node *SchedulerNode) handleResponseCommandRPC(response ResponseCommandRPC)
 	//TODO Sync les autres followers si necessaire
 }
 
-// Handle Request Vote RPC
+// handleRequestVoteRPC handles the request vote RPC sent to the node
 func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
 	if node.IsCrashed {
 		logger.Debug("Node is crashed. Ignore request vote RPC",
@@ -281,7 +346,7 @@ func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
 	// TODO check if the candidate is up to date (log)
 }
 
-// Handle Response Vote RPC
+// handleResponseVoteRPC handles the response vote RPC sent to the node
 func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 	if node.IsCrashed {
 		logger.Debug("Node is crashed. Ignore request vote RPC",
@@ -320,72 +385,5 @@ func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 	if response.Term > node.CurrentTerm {
 		node.CurrentTerm = response.Term
 		node.State = FollowerState
-	}
-}
-
-// Handle Is Alive Notification RPC
-func (node *SchedulerNode) broadcastSynchronizeCommandRPC() {
-	for i := uint32(0); i < Config.SchedulerNodeCount; i++ {
-		if i != node.Id {
-			channel := Config.NodeChannelMap[SchedulerNodeType][i].RequestCommand
-			request := RequestCommandRPC{
-				FromNode:    node.Card,
-				ToNode:      NodeCard{Id: i, Type: SchedulerNodeType},
-				Term:        node.CurrentTerm,
-				CommandType: SynchronizeCommand,
-			}
-			channel <- request
-		}
-	}
-}
-
-func (node *SchedulerNode) handleTimeout() {
-	if node.IsCrashed {
-		logger.Debug("Node is crashed. Ignore timeout", zap.String("Node", node.Card.String()))
-		return
-	}
-	switch node.State {
-	case FollowerState:
-		logger.Warn("Leader does not respond", zap.String("Node", node.Card.String()), zap.Duration("electionTimeout", node.ElectionTimeout))
-		node.startNewElection()
-	case CandidateState:
-		logger.Warn("Too much time to get a majority vote", zap.String("Node", node.Card.String()), zap.Duration("electionTimeout", node.ElectionTimeout))
-		node.startNewElection()
-	case LeaderState:
-		logger.Info("It's time for the Leader to send an IsAlive notification to followers", zap.String("Node", node.Card.String()))
-		node.broadcastSynchronizeCommandRPC()
-	}
-}
-
-/*********
- ** Run **
- *********/
-
-func (node *SchedulerNode) Run(wg *sync.WaitGroup) {
-	defer wg.Done()
-	logger.Info("Node is waiting the START command from REPL", zap.String("Node", node.Card.String()))
-	// Wait for the start command from REPL and listen to the channel RequestCommand
-	for !node.IsStarted {
-		select {
-		case request := <-node.Channel.RequestCommand:
-			node.handleRequestCommandRPC(request)
-		}
-	}
-	logger.Info("Node started", zap.String("Node", node.Card.String()))
-
-	for {
-		select {
-		case request := <-node.Channel.RequestCommand:
-			node.handleRequestCommandRPC(request)
-		case response := <-node.Channel.ResponseCommand:
-			node.handleResponseCommandRPC(response)
-		case request := <-node.Channel.RequestVote:
-			node.handleRequestVoteRPC(request)
-		case response := <-node.Channel.ResponseVote:
-			node.handleResponseVoteRPC(response)
-		case <-time.After(node.getTimeOut()):
-			node.handleTimeout()
-		}
-		time.Sleep(Config.NodeSpeedList[node.Id])
 	}
 }

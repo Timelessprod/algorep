@@ -1,5 +1,17 @@
 package repl
 
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/Timelessprod/algorep/pkg/raft"
+)
+
+/******************
+ ** Command Type **
+ ******************/
+
+// CommandType is the type of a command used by the REPL
 type CommandType string
 
 const (
@@ -12,6 +24,16 @@ const (
 	HELP_COMMAND    CommandType = "HELP"
 )
 
+// Convert a CommandType to a string
+func (c CommandType) String() string {
+	return string(c)
+}
+
+/************************
+ ** Speed Command Type **
+ ************************/
+
+// SpeedCommandType is the different speed level command used by the REPL
 type SpeedCommandType string
 
 const (
@@ -20,13 +42,14 @@ const (
 	HIGH_SPEED   SpeedCommandType = "high"
 )
 
-func (c CommandType) String() string {
-	return string(c)
-}
-
+// Convert a SpeedCommandType to a string
 func (c SpeedCommandType) String() string {
 	return string(c)
 }
+
+/*******************
+ ** REPL Messages **
+ *******************/
 
 const (
 	HELP_MESSAGE = `You can use 5 commands :
@@ -45,3 +68,15 @@ const (
 	INVALID_SPEED_LEVEL_MESSAGE = "Invalid speed level !"
 	NOT_STARTED_MESSAGE         = "Cluster is not started yet ! Run the START command first."
 )
+
+// ParseNodeNumber parses the node number from a command
+func parseNodeNumber(token string) (uint32, error) {
+	nodeId, err := strconv.ParseUint(token, 0, 32)
+	if err != nil {
+		return 0, fmt.Errorf("Invalid node number: %s", token)
+	}
+	if nodeId >= uint64(raft.Config.SchedulerNodeCount) {
+		return 0, fmt.Errorf("Node number should be between 0 and %d", raft.Config.SchedulerNodeCount-1)
+	}
+	return uint32(nodeId), nil
+}
