@@ -18,7 +18,7 @@ type SchedulerNode struct {
 	Card        NodeCard
 	State       State
 	CurrentTerm uint32
-	LeaderId    int32
+	LeaderId    int
 
 	VotedFor        int32
 	ElectionTimeout time.Duration
@@ -248,7 +248,7 @@ func (node *SchedulerNode) handleSynchronizeCommand(request RequestCommandRPC) {
 	}
 
 	// Seul le leader peut envoyer des commandes Sync donc on met à jour leaderId
-	node.LeaderId = int32(request.FromNode.Id)
+	node.LeaderId = int(request.FromNode.Id)
 
 	// TODO : Synchronisation (à revoir)
 	// Si pas cohérence des derniers logs
@@ -273,6 +273,32 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 		)
 		return
 	}
+
+	channel := Config.NodeChannelMap[request.FromNode.Type][request.FromNode.Id].ResponseCommand
+	response := ResponseCommandRPC{
+		FromNode:    node.Card,
+		ToNode:      request.FromNode,
+		CommandType: request.CommandType,
+		LeaderId:    node.LeaderId,
+	}
+
+	if node.State == LeaderState {
+		logger.Info("I am the leader ! Submit Job.... ", 
+			zap.String("Node", node.Card.String()), 
+			zap.String("Message", request.Message),
+		)
+		response.Success = true
+		
+	} else {
+		logger.Debug("Node is not the leader. Ignore AppendEntry command and redirect to leader",
+			zap.String("Node", node.Card.String()),
+			zap.Int("Presumed leader id", node.LeaderId),
+		)
+		response.Success = false
+	}
+
+	
+	channel <- response
 	// TODO
 }
 
@@ -370,7 +396,7 @@ func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 			node.VoteCount++
 			if node.VoteCount > Config.SchedulerNodeCount/2 {
 				node.State = LeaderState
-				node.LeaderId = int32(node.Card.Id)
+				node.LeaderId = int(node.Card.Id)
 				logger.Info("Leader elected", zap.String("Node", node.Card.String()))
 				return
 			}

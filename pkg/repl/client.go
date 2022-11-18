@@ -72,10 +72,12 @@ func (client *ClientNode) Run() {
 // sendMessageToLeader sends a message to the leader
 func (client *ClientNode) sendMessageToLeader(message raft.RequestCommandRPC) (*raft.ResponseCommandRPC, error) {
 	for i := 0; i < int(raft.Config.MaxRetryToFindLeader); i++ {
-		channel := raft.Config.NodeChannelMap[raft.SchedulerNodeType][client.LastLeaderId]
-		channel.RequestCommand <- message
+		requestChannel := raft.Config.NodeChannelMap[raft.SchedulerNodeType][client.LastLeaderId].RequestCommand
+		responseChannel := raft.Config.NodeChannelMap[client.NodeCard.Type][client.NodeCard.Id].ResponseCommand
+		message.ToNode = raft.NodeCard{Id: client.LastLeaderId, Type: raft.SchedulerNodeType}
+		requestChannel <- message
 		select {
-		case response := <-channel.ResponseCommand:
+		case response := <-responseChannel:
 			// If LeaderId given by node is -1
 			// it means that node does not know who is the leader
 			if response.LeaderId == raft.NO_LEADER {
@@ -99,7 +101,7 @@ func (client *ClientNode) sendMessageToLeader(message raft.RequestCommandRPC) (*
 			// Else if the tested node is the leader
 			return &response, nil
 		case <-time.After(raft.Config.MaxFindLeaderTimeout):
-			logger.Warn("Node is not responding, trying to find new leader with random node... Try n°",
+			logger.Warn("Node is not responding, trying to find new leader with random node...",
 				zap.Int("try", i+1),
 				zap.Uint32("tested nodeId", client.LastLeaderId),
 			)
@@ -124,6 +126,16 @@ func (client *ClientNode) handleSubmitCommand(tokenList []string) {
 
 	jobFilePath := tokenList[1]
 	fmt.Print("Submitting job ", jobFilePath, "... ")
+	request := raft.RequestCommandRPC{
+		FromNode:    client.NodeCard,
+		CommandType: raft.AppendEntryCommand,
+		Message:     "Submit job " + jobFilePath,
+	}
+	_, err := client.sendMessageToLeader(request)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		return
+	}
 	//TODO : check path and read file
 	//TODO : send job to leader
 	//TODO : read response
