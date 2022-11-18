@@ -283,12 +283,12 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 	}
 
 	if node.State == LeaderState {
-		logger.Info("I am the leader ! Submit Job.... ", 
-			zap.String("Node", node.Card.String()), 
+		logger.Info("I am the leader ! Submit Job.... ",
+			zap.String("Node", node.Card.String()),
 			zap.String("Message", request.Message),
 		)
 		response.Success = true
-		
+
 	} else {
 		logger.Debug("Node is not the leader. Ignore AppendEntry command and redirect to leader",
 			zap.String("Node", node.Card.String()),
@@ -297,7 +297,6 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 		response.Success = false
 	}
 
-	
 	channel <- response
 	// TODO
 }
@@ -349,6 +348,9 @@ func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
 		zap.String("ToNode", request.ToNode.String()),
 		zap.Int("CandidateId", int(request.CandidateId)),
 	)
+
+	node.updateTerm(request.Term)
+
 	channel := Config.NodeChannelMap[SchedulerNodeType][request.FromNode.Id].ResponseVote
 	response := ResponseVoteRPC{
 		FromNode:    request.ToNode,
@@ -357,19 +359,23 @@ func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
 		VoteGranted: false,
 	}
 
-	if node.CurrentTerm < request.Term {
-		logger.Debug("Candidate term is higher than current term. Vote granted !",
-			zap.String("id", node.Card.String()),
-			zap.Uint32("candidateTerm", request.Term),
-			zap.Uint32("currentTerm", node.CurrentTerm),
+	if node.CurrentTerm == request.Term &&
+		node.checkVote(request.CandidateId) {
+		// TODO : and ( m.lastLogTerm > logTerm(len(log)) or (m.lastLogTerm == logTerm(len(log)) and m.lastLogIndex >= len(log)) )
+		logger.Debug("Vote granted !",
+			zap.String("Node", node.Card.String()),
+			zap.Uint32("CandidateId", request.CandidateId),
 		)
 		node.VotedFor = int32(request.CandidateId)
 		response.VoteGranted = true
-		node.CurrentTerm = request.Term
-		node.State = FollowerState
+	} else {
+		logger.Debug("Vote refused !",
+			zap.String("Node", node.Card.String()),
+			zap.Uint32("CandidateId", request.CandidateId),
+		)
+		response.VoteGranted = false
 	}
 	channel <- response
-	// TODO check if the candidate is up to date (log)
 }
 
 // handleResponseVoteRPC handles the response vote RPC sent to the node
@@ -381,35 +387,51 @@ func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 		)
 		return
 	}
+
 	logger.Debug("Handle Response Vote RPC",
 		zap.String("FromNode", response.FromNode.String()),
 		zap.String("ToNode", response.ToNode.String()),
 		zap.Int("CandidateId", int(response.ToNode.Id)),
 	)
-	if node.State != CandidateState {
-		logger.Debug("Node is not a candidate. Ignore response vote RPC",
-			zap.String("Node", node.Card.String()),
-			zap.String("state", node.State.String()),
-		)
-	} else {
+
+	node.updateTerm(response.Term)
+	if node.State == CandidateState &&
+		node.CurrentTerm == response.Term {
+
 		if response.VoteGranted {
 			node.VoteCount++
+			
+			// When a candidate wins an election, it becomes leader.
 			if node.VoteCount > Config.SchedulerNodeCount/2 {
 				node.State = LeaderState
 				node.LeaderId = int(node.Card.Id)
 				logger.Info("Leader elected", zap.String("Node", node.Card.String()))
+				// TODO : nextIndex[for each peer] = len(log) + 1
 				return
 			}
-		} else {
-			logger.Warn("Vote not granted",
-				zap.String("Node", node.Card.String()),
-				zap.Uint32("ResponseTerm", response.Term),
-				zap.Uint32("NodeTerm", node.CurrentTerm),
-			)
 		}
+	} else {
+		logger.Debug("Node is not a candidate. Ignore response vote RPC",
+			zap.String("Node", node.Card.String()),
+			zap.String("VoteFromNode", response.FromNode.String()),
+			zap.String("state", node.State.String()),
+		)
 	}
-	if response.Term > node.CurrentTerm {
-		node.CurrentTerm = response.Term
+}
+
+// updateTerm updates the term of the node if the term is higher than the current term
+func (node *SchedulerNode) updateTerm(term uint32) {
+	if term > node.CurrentTerm {
+		node.CurrentTerm = term
 		node.State = FollowerState
+		node.VotedFor = NO_NODE
 	}
+}
+
+// checkVote checks if the node has already voted for the candidate
+func (node *SchedulerNode) checkVote(candidateId uint32) bool {
+	if node.VotedFor == NO_NODE || uint32(node.VotedFor) == candidateId {
+		return true
+	}
+	return false
 }

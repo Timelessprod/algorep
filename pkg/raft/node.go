@@ -10,8 +10,11 @@ import (
 
 var logger *zap.Logger = logging.Logger
 
+// Node id when no node is selected
+const NO_NODE = -1
+
 // LeaderId value when we don't know who is the leader
-const NO_LEADER = -1
+const NO_LEADER = NO_NODE
 
 /****************
  ** Node Types **
