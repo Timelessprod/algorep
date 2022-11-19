@@ -139,6 +139,7 @@ func (node *SchedulerNode) printNodeStateInFile() {
 	f.Seek(0, 0)
 	fmt.Fprintln(f, "--- ", node.Card.String(), " ---")
 	fmt.Fprintln(f, ">>> State: ", node.State)
+	fmt.Fprintln(f, ">>> IsCrashed: ", node.IsCrashed)
 	fmt.Fprintln(f, ">>> CurrentTerm: ", node.CurrentTerm)
 	fmt.Fprintln(f, ">>> LeaderId: ", node.LeaderId)
 	fmt.Fprintln(f, ">>> VotedFor: ", node.VotedFor)
@@ -202,12 +203,15 @@ func (node *SchedulerNode) handleTimeout() {
 func (node *SchedulerNode) broadcastRequestVote() {
 	for i := uint32(0); i < Config.SchedulerNodeCount; i++ {
 		if i != node.Id {
+			lastLogIndex := uint32(len(node.log))
 			channel := Config.NodeChannelMap[SchedulerNodeType][i].RequestVote
 			request := RequestVoteRPC{
-				FromNode:    node.Card,
-				ToNode:      NodeCard{Id: i, Type: SchedulerNodeType},
-				Term:        node.CurrentTerm,
-				CandidateId: node.Id,
+				FromNode:     node.Card,
+				ToNode:       NodeCard{Id: i, Type: SchedulerNodeType},
+				Term:         node.CurrentTerm,
+				CandidateId:  node.Id,
+				LastLogIndex: lastLogIndex,
+				LastLogTerm:  node.LogTerm(lastLogIndex),
 			}
 			channel <- request
 		}
@@ -457,9 +461,15 @@ func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
 		VoteGranted: false,
 	}
 
+	lastLogIndex := uint32(len(node.log))
+	lastLogTerm := node.LogTerm(lastLogIndex)
+	logConsistency := request.LastLogTerm > lastLogTerm ||
+		(request.LastLogTerm == lastLogTerm && request.LastLogIndex >= lastLogIndex)
+
 	if node.CurrentTerm == request.Term &&
-		node.checkVote(request.CandidateId) {
-		// TODO : and ( m.lastLogTerm > logTerm(len(log)) or (m.lastLogTerm == logTerm(len(log)) and m.lastLogIndex >= len(log)) )
+		node.checkVote(request.CandidateId) &&
+		logConsistency {
+
 		logger.Debug("Vote granted !",
 			zap.String("Node", node.Card.String()),
 			zap.Uint32("CandidateId", request.CandidateId),
