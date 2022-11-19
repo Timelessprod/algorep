@@ -99,7 +99,6 @@ func (node *SchedulerNode) Run(wg *sync.WaitGroup) {
 	logger.Info("Node started", zap.String("Node", node.Card.String()))
 
 	for {
-		node.printNodeStateInFile()
 		select {
 		case request := <-node.Channel.RequestCommand:
 			node.handleRequestCommandRPC(request)
@@ -112,6 +111,8 @@ func (node *SchedulerNode) Run(wg *sync.WaitGroup) {
 		case <-time.After(node.getTimeOut()):
 			node.handleTimeout()
 		}
+		node.printNodeStateInFile()
+		node.updateCommitIndex()
 		time.Sleep(Config.NodeSpeedList[node.Id])
 	}
 }
@@ -298,8 +299,8 @@ func (node *SchedulerNode) handleRecoverCommand() {
 
 /*** HANDLE RPC ***/
 
-// handleSynchronizeCommand handles the SynchronizeCommand to synchronize the entries and check if the leader is alive
-func (node *SchedulerNode) handleSynchronizeCommand(request RequestCommandRPC) {
+// handleRequestSynchronizeCommand handles the SynchronizeCommand to synchronize the entries and check if the leader is alive
+func (node *SchedulerNode) handleRequestSynchronizeCommand(request RequestCommandRPC) {
 	if node.IsCrashed {
 		logger.Debug("Node is crashed. Ignore synchronize command",
 			zap.String("Node", node.Card.String()),
@@ -362,6 +363,34 @@ func (node *SchedulerNode) handleSynchronizeCommand(request RequestCommandRPC) {
 	channel <- response
 }
 
+// handleResponseSynchronizeCommand handles the response of the SynchronizeCommand
+func (node *SchedulerNode) handleResponseSynchronizeCommand(response ResponseCommandRPC) {
+	if node.IsCrashed {
+		logger.Debug("Node is crashed. Ignore synchronize command",
+			zap.String("Node", node.Card.String()),
+		)
+		return
+	}
+
+	logger.Debug("Receive synchronize command response",
+		zap.String("FromNode", response.FromNode.String()),
+		zap.String("ToNode", node.Card.String()),
+		zap.Bool("Success", response.Success),
+		zap.Uint32("MatchIndex", response.MatchIndex),
+	)
+
+	node.updateTerm(response.Term)
+	if node.State == LeaderState && node.CurrentTerm == response.Term {
+		fromNode := response.FromNode.Id
+		if response.Success {
+			node.matchIndex[fromNode] = response.MatchIndex
+			node.nextIndex[fromNode] = response.MatchIndex + 1
+		} else {
+			node.nextIndex[fromNode] = MaxUint32(1, node.nextIndex[fromNode]-1)
+		}
+	}
+}
+
 // handleAppendEntryCommand handles the AppendEntryCommand sent to the leader to append an entry to the log and ignore the command if the node is not the leader
 func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 	if node.IsCrashed {
@@ -412,7 +441,7 @@ func (node *SchedulerNode) handleRequestCommandRPC(request RequestCommandRPC) {
 	)
 	switch request.CommandType {
 	case SynchronizeCommand:
-		node.handleSynchronizeCommand(request)
+		node.handleRequestSynchronizeCommand(request)
 	case AppendEntryCommand:
 		node.handleAppendEntryCommand(request)
 	case StartCommand:
@@ -432,8 +461,14 @@ func (node *SchedulerNode) handleResponseCommandRPC(response ResponseCommandRPC)
 		zap.Uint32("term", response.Term),
 		zap.Bool("success", response.Success),
 	)
-	//TODO if majority of success, commit
-	//TODO Sync les autres followers si necessaire
+	switch response.CommandType {
+	case SynchronizeCommand:
+		node.handleResponseSynchronizeCommand(response)
+	default:
+		logger.Error("Unknown response command type",
+			zap.String("CommandType", response.CommandType.String()),
+		)
+	}
 }
 
 // handleRequestVoteRPC handles the request vote RPC sent to the node
@@ -563,4 +598,21 @@ func (node *SchedulerNode) LogTerm(i uint32) uint32 {
 		return 0
 	}
 	return node.log[i].Term
+}
+
+// updateCommitIndex updates the commit index of the node
+func (node *SchedulerNode) updateCommitIndex() {
+	if node.State != LeaderState {
+		return
+	}
+
+	// Find the largest number M such that a majority of nodes has matchIndex[i] ≥ M
+	matchIndexMedianList := make([]uint32, len(node.matchIndex)+1)
+	copy(matchIndexMedianList, node.matchIndex)
+	matchIndexMedianList = append(matchIndexMedianList, uint32(len(node.log)))
+	median := matchIndexMedianList[Config.SchedulerNodeCount/2]
+
+	if node.LogTerm(median) == node.CurrentTerm {
+		node.commitIndex = median
+	}
 }
