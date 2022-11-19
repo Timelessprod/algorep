@@ -97,3 +97,25 @@ type LogEntry struct {
 	Term    uint32
 	Command string
 }
+
+/***************************
+ ** Map LogEntry function **
+ ***************************/
+
+// Select range of log entries and return a new slice of log entries (start inclusive, end inclusive)
+func ExtractListFromMap(m *map[uint32]LogEntry, start uint32, end uint32) []LogEntry {
+	var list []LogEntry
+	for i := start; i <= end; i++ {
+		list = append(list, (*m)[i])
+	}
+	return list
+}
+
+// Flush the log entries after the given index. index + 1 and more are flushed but index is kept.
+func FlushAfterIndex(m *map[uint32]LogEntry, index uint32) {
+	for i := range *m {
+		if i > index {
+			delete(*m, i)
+		}
+	}
+}
