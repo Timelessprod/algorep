@@ -24,6 +24,16 @@ type SchedulerNode struct {
 	ElectionTimeout time.Duration
 	VoteCount       uint32
 
+	// Each entry contains command for state machine
+	// and term when entry was received by leader (first index is 1)
+	log map[int]LogEntry
+	// Index of highest log entry known to be committed (initialized to 0, increases monotonically)
+	commitIndex uint32
+	// Index of highest log entry known to be replicated on other nodes (initialized to 0, increases monotonically)
+	matchIndex []uint32
+	// Index of highest log entry available to store next entry (initialized to 1, increases monotonically)
+	nextIndex []uint32
+
 	Channel ChannelContainer
 
 	IsStarted bool
@@ -43,6 +53,19 @@ func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 	durationRange := int(Config.MaxElectionTimeout - Config.MinElectionTimeout)
 	node.ElectionTimeout = time.Duration(rand.Intn(durationRange)) + Config.MinElectionTimeout
 
+	// Initialize all elements used to store and replicate the log
+	node.log = make(map[int]LogEntry)
+	node.commitIndex = 0
+	node.matchIndex = make([]uint32, Config.SchedulerNodeCount)
+	for i := range node.matchIndex {
+		node.matchIndex[i] = 0
+	}
+	node.nextIndex = make([]uint32, Config.SchedulerNodeCount)
+	for i := range node.nextIndex {
+		node.nextIndex[i] = 1
+	}
+
+	// Initialize the channel container
 	node.Channel.RequestCommand = make(chan RequestCommandRPC, Config.ChannelBufferSize)
 	node.Channel.ResponseCommand = make(chan ResponseCommandRPC, Config.ChannelBufferSize)
 	node.Channel.RequestVote = make(chan RequestVoteRPC, Config.ChannelBufferSize)

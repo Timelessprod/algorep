@@ -87,3 +87,13 @@ const (
 func (s State) String() string {
 	return [...]string{"Follower", "Candidate", "Leader"}[s]
 }
+
+/***************
+ ** Log Entry **
+ ***************/
+
+// LogEntry is an entry in the log
+type LogEntry struct {
+	Term    uint32
+	Command string
+}
