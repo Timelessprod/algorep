@@ -1,7 +1,10 @@
 package raft
 
 import (
+	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -26,7 +29,7 @@ type SchedulerNode struct {
 
 	// Each entry contains command for state machine
 	// and term when entry was received by leader (first index is 1)
-	log map[int]LogEntry
+	log map[uint32]LogEntry
 	// Index of highest log entry known to be committed (initialized to 0, increases monotonically)
 	commitIndex uint32
 	// Index of highest log entry known to be replicated on other nodes (initialized to 0, increases monotonically)
@@ -38,6 +41,9 @@ type SchedulerNode struct {
 
 	IsStarted bool
 	IsCrashed bool
+
+	// State file to debug the node state
+	StateFile *os.File
 }
 
 // Init the scheduler node
@@ -54,7 +60,7 @@ func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 	node.ElectionTimeout = time.Duration(rand.Intn(durationRange)) + Config.MinElectionTimeout
 
 	// Initialize all elements used to store and replicate the log
-	node.log = make(map[int]LogEntry)
+	node.log = make(map[uint32]LogEntry)
 	node.commitIndex = 0
 	node.matchIndex = make([]uint32, Config.SchedulerNodeCount)
 	for i := range node.matchIndex {
@@ -71,6 +77,9 @@ func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 	node.Channel.RequestVote = make(chan RequestVoteRPC, Config.ChannelBufferSize)
 	node.Channel.ResponseVote = make(chan ResponseVoteRPC, Config.ChannelBufferSize)
 
+	// Initialize the state file
+	node.InitStateInFile()
+
 	logger.Info("Node initialized", zap.Uint32("id", id))
 	return *node
 }
@@ -78,6 +87,7 @@ func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 // Run the scheduler node
 func (node *SchedulerNode) Run(wg *sync.WaitGroup) {
 	defer wg.Done()
+	defer node.StateFile.Close()
 	logger.Info("Node is waiting the START command from REPL", zap.String("Node", node.Card.String()))
 	// Wait for the start command from REPL and listen to the channel RequestCommand
 	for !node.IsStarted {
@@ -89,6 +99,7 @@ func (node *SchedulerNode) Run(wg *sync.WaitGroup) {
 	logger.Info("Node started", zap.String("Node", node.Card.String()))
 
 	for {
+		node.printNodeStateInFile()
 		select {
 		case request := <-node.Channel.RequestCommand:
 			node.handleRequestCommandRPC(request)
@@ -103,6 +114,51 @@ func (node *SchedulerNode) Run(wg *sync.WaitGroup) {
 		}
 		time.Sleep(Config.NodeSpeedList[node.Id])
 	}
+}
+
+func (node *SchedulerNode) InitStateInFile() {
+	path := fmt.Sprintf("state/%d.node", node.Id)
+	os.MkdirAll(filepath.Dir(path), os.ModePerm)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		logger.Error("Error while creating state file",
+			zap.String("Node", node.Card.String()),
+			zap.Error(err),
+		)
+		return
+	}
+	node.StateFile = f
+}
+
+func (node *SchedulerNode) printNodeStateInFile() {
+	if node.StateFile == nil {
+		return
+	}
+	f := node.StateFile
+	f.Truncate(0)
+	f.Seek(0, 0)
+	fmt.Fprintln(f, "--- ", node.Card.String(), " ---")
+	fmt.Fprintln(f, ">>> State: ", node.State)
+	fmt.Fprintln(f, ">>> CurrentTerm: ", node.CurrentTerm)
+	fmt.Fprintln(f, ">>> LeaderId: ", node.LeaderId)
+	fmt.Fprintln(f, ">>> VotedFor: ", node.VotedFor)
+	fmt.Fprintln(f, ">>> ElectionTimeout: ", node.ElectionTimeout)
+	fmt.Fprintln(f, ">>> VoteCount: ", node.VoteCount)
+	fmt.Fprintln(f, ">>> CommitIndex: ", node.commitIndex)
+	fmt.Fprintln(f, ">>> MatchIndex: ", node.matchIndex)
+	fmt.Fprintln(f, ">>> NextIndex: ", node.nextIndex)
+	fmt.Fprintln(f, "### Log ###")
+	for i, entry := range node.log {
+		fmt.Fprintln(f, "[", i, "] ", "Term: ", entry.Term, " | Command: ", entry.Command)
+	}
+	fmt.Fprintln(f, "----------------")
+}
+
+// Add a new entry to the log
+func (node *SchedulerNode) addEntryToLog(entry LogEntry) {
+	index := node.nextIndex[node.Card.Id]
+	node.log[index] = entry
+	node.nextIndex[node.Card.Id] = index + 1
 }
 
 /*** MANAGE TIMEOUT ***/
@@ -312,6 +368,12 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 		)
 		response.Success = true
 
+		entry := LogEntry{
+			Term:    node.CurrentTerm,
+			Command: request.Message,
+		}
+		node.addEntryToLog(entry)
+
 	} else {
 		logger.Debug("Node is not the leader. Ignore AppendEntry command and redirect to leader",
 			zap.String("Node", node.Card.String()),
@@ -321,7 +383,6 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 	}
 
 	channel <- response
-	// TODO
 }
 
 //  handleRequestCommandRPC handles the command RPC sent to the node
