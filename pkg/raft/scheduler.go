@@ -35,8 +35,8 @@ func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 	node.Id = id
 	node.Card = NodeCard{Id: id, Type: SchedulerNodeType}
 	node.State = FollowerState
-	node.LeaderId = NO_LEADER
-	node.VotedFor = NO_LEADER
+	node.LeaderId = NO_NODE
+	node.VotedFor = NO_NODE
 	node.VoteCount = 0
 
 	// Compute random leaderIsAliveTimeout
@@ -400,7 +400,7 @@ func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 
 		if response.VoteGranted {
 			node.VoteCount++
-			
+
 			// When a candidate wins an election, it becomes leader.
 			if node.VoteCount > Config.SchedulerNodeCount/2 {
 				node.State = LeaderState

@@ -80,7 +80,7 @@ func (client *ClientNode) sendMessageToLeader(message raft.RequestCommandRPC) (*
 		case response := <-responseChannel:
 			// If LeaderId given by node is -1
 			// it means that node does not know who is the leader
-			if response.LeaderId == raft.NO_LEADER {
+			if response.LeaderId == raft.NO_NODE {
 				logger.Warn("Leader is unknown. Check random node !",
 					zap.Uint32("tested nodeId", client.LastLeaderId),
 				)
