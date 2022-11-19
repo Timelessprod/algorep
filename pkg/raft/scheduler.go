@@ -501,10 +501,7 @@ func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 
 			// When a candidate wins an election, it becomes leader.
 			if node.VoteCount > Config.SchedulerNodeCount/2 {
-				node.State = LeaderState
-				node.LeaderId = int(node.Card.Id)
-				logger.Info("Leader elected", zap.String("Node", node.Card.String()))
-				// TODO : nextIndex[for each peer] = len(log) + 1
+				node.becomeLeader()
 				return
 			}
 		}
@@ -514,6 +511,16 @@ func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 			zap.String("VoteFromNode", response.FromNode.String()),
 			zap.String("state", node.State.String()),
 		)
+	}
+}
+
+// becomeLeader sets the node as leader
+func (node *SchedulerNode) becomeLeader() {
+	node.State = LeaderState
+	node.LeaderId = int(node.Card.Id)
+	logger.Info("Leader elected", zap.String("Node", node.Card.String()))
+	for nodeId := uint32(0); nodeId < Config.SchedulerNodeCount; nodeId++ {
+		node.nextIndex[nodeId] = uint32(len(node.log)) + 1
 	}
 }
 
