@@ -519,3 +519,11 @@ func (node *SchedulerNode) checkVote(candidateId uint32) bool {
 	}
 	return false
 }
+
+// LogTerm returns the term of the log entry at index i, or 0 if no such entry exists
+func (node *SchedulerNode) LogTerm(i int) uint32 {
+	if i < 1 || i > len(node.log) {
+		return 0
+	}
+	return node.log[uint32(i)].Term
+}
