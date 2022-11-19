@@ -119,3 +119,15 @@ func FlushAfterIndex(m *map[uint32]LogEntry, index uint32) {
 		}
 	}
 }
+
+/***********
+ ** Utils **
+ ***********/
+
+// Minimum of two uint32
+func MinUint32(a uint32, b uint32) uint32 {
+	if a <= b {
+		return a
+	}
+	return b
+}

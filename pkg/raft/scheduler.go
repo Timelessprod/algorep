@@ -214,18 +214,32 @@ func (node *SchedulerNode) broadcastRequestVote() {
 	}
 }
 
+// sendSynchronizeCommandRPC sends a SynchronizeCommand RPC to a node
+func (node *SchedulerNode) sendSynchronizeCommandRPC(nodeId uint32) {
+	channel := Config.NodeChannelMap[SchedulerNodeType][nodeId].RequestCommand
+	lastIndex := uint32(len(node.log))
+	node.nextIndex[nodeId] = uint32(lastIndex)
+
+	request := RequestCommandRPC{
+		FromNode:    node.Card,
+		ToNode:      NodeCard{Id: nodeId, Type: SchedulerNodeType},
+		CommandType: SynchronizeCommand,
+
+		Term:        node.CurrentTerm,
+		PrevIndex:   node.nextIndex[nodeId] - 1,
+		PrevTerm:    node.LogTerm(node.nextIndex[nodeId] - 1),
+		Entries:     ExtractListFromMap(&node.log, node.nextIndex[nodeId], lastIndex),
+		CommitIndex: node.commitIndex,
+	}
+
+	channel <- request
+}
+
 // brodcastSynchronizeCommand sends a SynchronizeCommand to all nodes (except itself)
 func (node *SchedulerNode) broadcastSynchronizeCommandRPC() {
 	for i := uint32(0); i < Config.SchedulerNodeCount; i++ {
 		if i != node.Id {
-			channel := Config.NodeChannelMap[SchedulerNodeType][i].RequestCommand
-			request := RequestCommandRPC{
-				FromNode:    node.Card,
-				ToNode:      NodeCard{Id: i, Type: SchedulerNodeType},
-				Term:        node.CurrentTerm,
-				CommandType: SynchronizeCommand,
-			}
-			channel <- request
+			node.sendSynchronizeCommandRPC(i)
 		}
 	}
 }
@@ -288,6 +302,7 @@ func (node *SchedulerNode) handleSynchronizeCommand(request RequestCommandRPC) {
 		)
 		return
 	}
+
 	response := ResponseCommandRPC{
 		FromNode:    node.Card,
 		ToNode:      request.FromNode,
@@ -295,8 +310,10 @@ func (node *SchedulerNode) handleSynchronizeCommand(request RequestCommandRPC) {
 	}
 	channel := Config.NodeChannelMap[request.FromNode.Type][request.FromNode.Id].ResponseCommand
 
+	node.updateTerm(request.Term)
+
 	// Si request term < current term (sync pas à jours), alors on ignore et on répond false
-	if request.Term < node.CurrentTerm {
+	if node.CurrentTerm > request.Term {
 		logger.Debug("Ignore synchronize command because request term < current term",
 			zap.String("Node", node.Card.String()),
 			zap.Uint32("request term", request.Term),
@@ -307,8 +324,9 @@ func (node *SchedulerNode) handleSynchronizeCommand(request RequestCommandRPC) {
 		return
 	}
 
-	// Si node.State != follower et donc implicitement request term >= current term
-	// alors la node devient follower
+	// Seul le leader peut envoyer des commandes Sync donc on met à jour leaderId
+	node.LeaderId = int(request.FromNode.Id)
+
 	if node.State != FollowerState {
 		logger.Info("Node become Follower",
 			zap.String("Node", node.Card.String()),
@@ -316,31 +334,27 @@ func (node *SchedulerNode) handleSynchronizeCommand(request RequestCommandRPC) {
 		node.State = FollowerState
 	}
 
-	// Si request term > current term, alors on met à jour current term
-	if request.Term > node.CurrentTerm {
-		logger.Info("Update current term",
-			zap.String("Node", node.Card.String()),
-			zap.Uint32("new (request term)", request.Term),
-			zap.Uint32("old (current term)", node.CurrentTerm),
-		)
-		node.CurrentTerm = request.Term
+	lastLogConsistency := node.LogTerm(request.PrevIndex) == request.PrevTerm &&
+		request.PrevIndex <= uint32(len(node.log))
+	success := request.PrevIndex == 0 || lastLogConsistency
+
+	var index uint32
+	if success {
+		index = request.PrevIndex
+		for j := 0; j < len(request.Entries); j++ {
+			index++
+			if node.LogTerm(index) != request.Entries[j].Term {
+				node.log[index] = request.Entries[j]
+			}
+		}
+		FlushAfterIndex(&node.log, index)
+		node.commitIndex = MinUint32(request.CommitIndex, index)
+	} else {
+		index = 0
 	}
 
-	// Seul le leader peut envoyer des commandes Sync donc on met à jour leaderId
-	node.LeaderId = int(request.FromNode.Id)
-
-	// TODO : Synchronisation (à revoir)
-	// Si pas cohérence des derniers logs
-	// ==> response.Success = false
-	// ==>Si conflit avec un entry existant et un nouveau,
-	// ====> on supprime l'entry existant et tous les suivants
-	// ==> On répond avec le dernier index de l'entry valide
-
-	// Sinon
-	// => on ajoute la nouvel entry
-	// => commit l'index indiqué par la requete
-	// Reponse avec success = true
-	response.Success = true // Temporaire si pas de conflit
+	response.MatchIndex = index
+	response.Success = success
 	channel <- response
 }
 
@@ -506,6 +520,12 @@ func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 // updateTerm updates the term of the node if the term is higher than the current term
 func (node *SchedulerNode) updateTerm(term uint32) {
 	if term > node.CurrentTerm {
+		logger.Debug("Update term, reset vote and change state to follower",
+			zap.String("Node", node.Card.String()),
+			zap.Uint32("CurrentTerm", node.CurrentTerm),
+			zap.Uint32("NewTerm", term),
+			zap.String("OldState", node.State.String()),
+		)
 		node.CurrentTerm = term
 		node.State = FollowerState
 		node.VotedFor = NO_NODE
@@ -521,9 +541,9 @@ func (node *SchedulerNode) checkVote(candidateId uint32) bool {
 }
 
 // LogTerm returns the term of the log entry at index i, or 0 if no such entry exists
-func (node *SchedulerNode) LogTerm(i int) uint32 {
-	if i < 1 || i > len(node.log) {
+func (node *SchedulerNode) LogTerm(i uint32) uint32 {
+	if i < 1 || i > uint32(len(node.log)) {
 		return 0
 	}
-	return node.log[uint32(i)].Term
+	return node.log[i].Term
 }
