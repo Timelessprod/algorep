@@ -37,6 +37,11 @@ type RequestCommandRPC struct {
 	Term        uint32
 	CommandType CommandType
 	Message     string
+
+	PrevIndex   uint32
+	PrevTerm    uint32
+	Entries     []LogEntry
+	CommitIndex uint32
 }
 
 // ResponseCommandRPC is the RPC used to send a response to a command
@@ -44,12 +49,14 @@ type ResponseCommandRPC struct {
 	FromNode NodeCard
 	ToNode   NodeCard
 
-	Term        uint32
-	LeaderId    int
+	Term     uint32
+	LeaderId int
+
 	CommandType CommandType
 	Message     string
-	Success     bool
-	MatchIndex  uint32
+
+	Success    bool
+	MatchIndex uint32
 }
 
 /**************
@@ -61,8 +68,10 @@ type RequestVoteRPC struct {
 	FromNode NodeCard
 	ToNode   NodeCard
 
-	Term        uint32
-	CandidateId uint32
+	Term         uint32
+	CandidateId  uint32
+	LastLogTerm  uint32
+	LastLogIndex uint32
 }
 
 // ResponseVoteRPC is the RPC used to send a response to a vote request
