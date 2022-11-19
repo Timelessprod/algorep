@@ -12,6 +12,8 @@ algorep
 
 # Log
 *.log
+state/
+*.node
 
 # Test binary, built with `go test -c`
 *.test
