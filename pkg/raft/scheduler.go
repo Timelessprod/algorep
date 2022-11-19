@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -620,6 +621,7 @@ func (node *SchedulerNode) updateCommitIndex() {
 	matchIndexMedianList := make([]uint32, len(node.matchIndex)+1)
 	copy(matchIndexMedianList, node.matchIndex)
 	matchIndexMedianList = append(matchIndexMedianList, uint32(len(node.log)))
+	sort.Slice(matchIndexMedianList, func(i, j int) bool { return matchIndexMedianList[i] < matchIndexMedianList[j] })
 	median := matchIndexMedianList[Config.SchedulerNodeCount/2]
 
 	if node.LogTerm(median) == node.CurrentTerm {
