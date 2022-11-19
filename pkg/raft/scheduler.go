@@ -223,7 +223,6 @@ func (node *SchedulerNode) broadcastRequestVote() {
 func (node *SchedulerNode) sendSynchronizeCommandRPC(nodeId uint32) {
 	channel := Config.NodeChannelMap[SchedulerNodeType][nodeId].RequestCommand
 	lastIndex := uint32(len(node.log))
-	node.nextIndex[nodeId] = uint32(lastIndex)
 
 	request := RequestCommandRPC{
 		FromNode:    node.Card,
@@ -311,6 +310,7 @@ func (node *SchedulerNode) handleRequestSynchronizeCommand(request RequestComman
 	response := ResponseCommandRPC{
 		FromNode:    node.Card,
 		ToNode:      request.FromNode,
+		Term:        node.CurrentTerm,
 		CommandType: request.CommandType,
 	}
 	channel := Config.NodeChannelMap[request.FromNode.Type][request.FromNode.Id].ResponseCommand
@@ -342,6 +342,15 @@ func (node *SchedulerNode) handleRequestSynchronizeCommand(request RequestComman
 	lastLogConsistency := node.LogTerm(request.PrevIndex) == request.PrevTerm &&
 		request.PrevIndex <= uint32(len(node.log))
 	success := request.PrevIndex == 0 || lastLogConsistency
+	logger.Debug("Fields of received synchronization request",
+		zap.String("Node", node.Card.String()),
+		zap.Bool("lastLogConsistency", lastLogConsistency),
+		zap.Uint32("request.PrevIndex", request.PrevIndex),
+		zap.Uint32("len(node.log)", uint32(len(node.log))),
+		zap.Uint32("request.PrevTerm", request.PrevTerm),
+		zap.Uint32("node.LogTerm(request.PrevIndex)", node.LogTerm(request.PrevIndex)),
+		zap.String("request.entries", fmt.Sprintf("%v", request.Entries)),
+	)
 
 	var index uint32
 	if success {
@@ -404,6 +413,7 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 	response := ResponseCommandRPC{
 		FromNode:    node.Card,
 		ToNode:      request.FromNode,
+		Term:        node.CurrentTerm,
 		CommandType: request.CommandType,
 		LeaderId:    node.LeaderId,
 	}
