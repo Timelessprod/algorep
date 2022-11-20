@@ -159,7 +159,7 @@ func (node *SchedulerNode) printNodeStateInFile() {
 	fmt.Fprintln(f, ">>> NextIndex: ", node.nextIndex)
 	fmt.Fprintln(f, "### Log ###")
 	for i, entry := range node.log {
-		fmt.Fprintf(f, "[%v] Job %v | Worker %v | %v\n", i, entry.Job.GetReference(), entry.WorkerId, entry.Job.Status.String())
+		fmt.Fprintf(f, "[%v] Job %v | Worker %v | %v\n", i, entry.Job.GetReference(), entry.Job.WorkerId, entry.Job.Status.String())
 	}
 	fmt.Fprintln(f, "----------------")
 }
@@ -435,7 +435,7 @@ func (node *SchedulerNode) handleAppendEntryCommand(request core.RequestCommandR
 		)
 
 		entry.Term = node.CurrentTerm
-		entry.WorkerId = int(node.GetWorkerId())
+		entry.Job.WorkerId = int(node.GetWorkerId())
 		entry.Job.Id = node.GetJobId()
 		entry.Job.Term = node.CurrentTerm
 		entry.Job.Status = core.JobWaiting

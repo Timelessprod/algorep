@@ -13,8 +13,8 @@ var logger *zap.Logger = Logger
 type EntryType int
 
 const (
-	OpenJob  EntryType = iota
-	CloseJob EntryType = iota
+	OpenJob = iota
+	CloseJob
 )
 
 // Convert an EntryType to a string
@@ -28,10 +28,9 @@ func (e EntryType) String() string {
 
 // Entry is an entry in the log
 type Entry struct {
-	Type     EntryType
-	Term     uint32
-	WorkerId int
-	Job      Job
+	Type EntryType
+	Term uint32
+	Job  Job
 }
 
 /***************************

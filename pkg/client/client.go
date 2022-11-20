@@ -127,12 +127,12 @@ func (client *ClientNode) handleSubmitCommand(tokenList []string) {
 	fmt.Print("Submitting job ", jobFilePath, "... ")
 
 	job := core.Job{
-		Input: jobFilePath, //TODO : Read file
+		Input:    jobFilePath, //TODO : Read file
+		WorkerId: core.NO_WORKER,
 	}
 	entry := core.Entry{
-		Type:     core.OpenJob,
-		Job:      job,
-		WorkerId: core.NO_WORKER,
+		Type: core.OpenJob,
+		Job:  job,
 	}
 	request := core.RequestCommandRPC{
 		FromNode:    client.NodeCard,

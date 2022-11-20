@@ -11,8 +11,8 @@ const NO_WORKER = -1
 type JobStatus int
 
 const (
-	JobWaiting JobStatus = iota
-	JobDone    JobStatus = iota
+	JobWaiting = iota
+	JobDone
 )
 
 // Convert a JobStatus to a string
@@ -25,11 +25,12 @@ func (s JobStatus) String() string {
  *********/
 
 type Job struct {
-	Id     uint32
-	Term   uint32
-	Status JobStatus
-	Input  string
-	Output string
+	Id       uint32
+	Term     uint32
+	Status   JobStatus
+	WorkerId int
+	Input    string
+	Output   string
 }
 
 // Get the reference `Id-Term` of the job
