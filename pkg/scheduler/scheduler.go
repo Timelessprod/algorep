@@ -648,9 +648,11 @@ func (node *SchedulerNode) GetJobId() uint32 {
 
 // GetWorkerId finds the appropriate worker id for the job (the worker with the lowest load)
 func (node *SchedulerNode) GetWorkerId() uint32 {
-	// TODO: implement this algo
 	// the number of jobs in the queue for each worker
-	//jobCount := make([]int, Config.WorkerNodeCount)
+	jobCount := make([]uint32, core.Config.WorkerNodeCount)
+	for i, container := range core.Config.NodeChannelMap[core.WorkerNodeType] {
+		jobCount[i] = uint32(len(container.JobQueue))
+	}
 	// get the worker id with the lowest number of jobs in the queue
-	return 0
+	return utils.IndexMinUint32(jobCount)
 }

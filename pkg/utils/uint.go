@@ -19,3 +19,14 @@ func MaxUint32(a uint32, b uint32) uint32 {
 	}
 	return b
 }
+
+// Get the index with the lowest value in a slice of uint32
+func IndexMinUint32(values []uint32) uint32 {
+	var minIndex uint32 = 0
+	for i, v := range values {
+		if v < values[minIndex] {
+			minIndex = uint32(i)
+		}
+	}
+	return minIndex
+}
