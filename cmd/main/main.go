@@ -3,14 +3,14 @@ package main
 import (
 	"sync"
 
-	"github.com/Timelessprod/algorep/pkg/logging"
+	"github.com/Timelessprod/algorep/pkg/core"
 	"github.com/Timelessprod/algorep/pkg/raft"
 	"github.com/Timelessprod/algorep/pkg/repl"
 	"go.uber.org/zap"
 )
 
 var wg sync.WaitGroup
-var logger *zap.Logger = logging.Logger
+var logger *zap.Logger = core.Logger
 
 func main() {
 	// To flush the last log in the buffer

@@ -36,7 +36,6 @@ type RequestCommandRPC struct {
 
 	Term        uint32
 	CommandType CommandType
-	Entry
 
 	PrevIndex   uint32
 	PrevTerm    uint32

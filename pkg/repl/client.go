@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Timelessprod/algorep/pkg/logging"
+	"github.com/Timelessprod/algorep/pkg/core"
 	"github.com/Timelessprod/algorep/pkg/raft"
+	"github.com/Timelessprod/algorep/pkg/worker"
 	"go.uber.org/zap"
 )
 
-var logger *zap.Logger = logging.Logger
+var logger *zap.Logger = core.Logger
 
 /*** UTILS ***/
 
@@ -124,20 +125,30 @@ func (client *ClientNode) handleSubmitCommand(tokenList []string) {
 		return
 	}
 
+
 	jobFilePath := tokenList[1]
 	fmt.Print("Submitting job ", jobFilePath, "... ")
+
+
+	job := worker.Job{
+		Input: jobFilePath, //TODO : Read file
+	}
+	entry := raft.Entry{
+		Type:     raft.OpenJob,
+		Job:      job,
+		WorkerId: worker.NO_WORKER,
+	}
 	request := raft.RequestCommandRPC{
 		FromNode:    client.NodeCard,
 		CommandType: raft.AppendEntryCommand,
-		//Message:     "Submit job " + jobFilePath,
+		Entries:     []raft.Entry{entry},
 	}
+
 	_, err := client.sendMessageToLeader(request)
 	if err != nil {
 		fmt.Println("Error: ", err)
 		return
 	}
-	//TODO : check path and read file
-	//TODO : send job to leader
 	//TODO : read response
 	fmt.Println("Done.")
 }

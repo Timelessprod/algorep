@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Timelessprod/algorep/pkg/worker"
 	"go.uber.org/zap"
 )
 
@@ -31,6 +32,8 @@ type SchedulerNode struct {
 	// Each entry contains command for state machine
 	// and term when entry was received by leader (first index is 1)
 	log map[uint32]Entry
+	// Job id counter
+	jobIdCounter uint32
 	// Index of highest log entry known to be committed (initialized to 0, increases monotonically)
 	commitIndex uint32
 	// Index of highest log entry known to be replicated on other nodes (initialized to 0, increases monotonically)
@@ -62,6 +65,7 @@ func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 
 	// Initialize all elements used to store and replicate the log
 	node.log = make(map[uint32]Entry)
+	node.jobIdCounter = 0
 	node.commitIndex = 0
 	node.matchIndex = make([]uint32, Config.SchedulerNodeCount)
 	for i := range node.matchIndex {
@@ -152,7 +156,7 @@ func (node *SchedulerNode) printNodeStateInFile() {
 	fmt.Fprintln(f, ">>> NextIndex: ", node.nextIndex)
 	fmt.Fprintln(f, "### Log ###")
 	for i, entry := range node.log {
-		fmt.Fprintln(f, "[", i, "] ", "Term: ", entry.Term, " | JobRef: ", entry.Job.GetReference(), " | Status: ", entry.Job.Status.String())
+		fmt.Fprintf(f, "[%v] Job %v | Worker %v | %v\n", i, entry.Job.GetReference(), entry.WorkerId, entry.Job.Status.String())
 	}
 	fmt.Fprintln(f, "----------------")
 }
@@ -420,17 +424,20 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 	}
 
 	if node.State == LeaderState {
+		entry := request.Entries[0] // Append only one entry at a time
+
 		logger.Info("I am the leader ! Submit Job.... ",
 			zap.String("Node", node.Card.String()),
-			zap.String("JobRef", request.Entry.Job.GetReference()),
+			zap.String("JobRef", entry.Job.GetReference()),
 		)
-		response.Success = true
 
-		entry := Entry{
-			Term: node.CurrentTerm,
-			//Command: request.Message,
-		}
+		entry.Term = node.CurrentTerm
+		entry.WorkerId = int(node.GetWorkerId())
+		entry.Job.Id = node.GetJobId()
+		entry.Job.Term = node.CurrentTerm
+		entry.Job.Status = worker.JobWaiting
 		node.addEntryToLog(entry)
+		response.Success = true
 
 	} else {
 		logger.Debug("Node is not the leader. Ignore AppendEntry command and redirect to leader",
@@ -578,6 +585,7 @@ func (node *SchedulerNode) becomeLeader() {
 	for nodeId := uint32(0); nodeId < Config.SchedulerNodeCount; nodeId++ {
 		node.nextIndex[nodeId] = uint32(len(node.log)) + 1
 	}
+	node.jobIdCounter = 0
 }
 
 // updateTerm updates the term of the node if the term is higher than the current term
@@ -627,4 +635,19 @@ func (node *SchedulerNode) updateCommitIndex() {
 	if node.LogTerm(median) == node.CurrentTerm {
 		node.commitIndex = median
 	}
+}
+
+// GetJobId generates a new job id and increments the job id counter
+func (node *SchedulerNode) GetJobId() uint32 {
+	node.jobIdCounter++
+	return node.jobIdCounter
+}
+
+// GetWorkerId finds the appropriate worker id for the job (the worker with the lowest load)
+func (node *SchedulerNode) GetWorkerId() uint32 {
+	// TODO: implement this algo
+	// the number of jobs in the queue for each worker
+	//jobCount := make([]int, Config.WorkerNodeCount)
+	// get the worker id with the lowest number of jobs in the queue
+	return 0
 }

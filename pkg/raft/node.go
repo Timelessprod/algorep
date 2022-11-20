@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Timelessprod/algorep/pkg/logging"
+	"github.com/Timelessprod/algorep/pkg/core"
 	"github.com/Timelessprod/algorep/pkg/worker"
 	"go.uber.org/zap"
 )
 
-var logger *zap.Logger = logging.Logger
+var logger *zap.Logger = core.Logger
 
 // Node id when no node is selected
 const NO_NODE = -1
@@ -105,16 +105,16 @@ func (e EntryType) String() string {
 	return [...]string{"OpenJob", "CloseJob"}[e]
 }
 
-/***************
- ** Log Entry **
- ***************/
+/***********
+ ** Entry **
+ ***********/
 
 // Entry is an entry in the log
 type Entry struct {
-	Type EntryType
-	Term uint32
-	WorkerId uint32
-	Job  worker.Job
+	Type     EntryType
+	Term     uint32
+	WorkerId int
+	Job      worker.Job
 }
 
 /***************************
