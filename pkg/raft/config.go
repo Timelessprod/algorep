@@ -9,6 +9,7 @@ import "time"
 // Config contains the configuration of the raft algorithm
 var Config = struct {
 	SchedulerNodeCount uint32
+	WorkerNodeCount    uint32
 	ChannelBufferSize  uint32
 	// NodeChannelMap contains all the channels used by the nodes to communicate with each other
 	NodeSpeedList []time.Duration
@@ -29,6 +30,7 @@ var Config = struct {
 	MaxRetryToFindLeader uint32
 }{
 	SchedulerNodeCount: 5,
+	WorkerNodeCount:    2,
 	ChannelBufferSize:  100,
 	NodeChannelMap:     InitNodeChannelMap(),
 

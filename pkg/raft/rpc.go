@@ -36,11 +36,11 @@ type RequestCommandRPC struct {
 
 	Term        uint32
 	CommandType CommandType
-	Message     string
+	Entry
 
 	PrevIndex   uint32
 	PrevTerm    uint32
-	Entries     []LogEntry
+	Entries     []Entry
 	CommitIndex uint32
 }
 

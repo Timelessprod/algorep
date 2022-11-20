@@ -129,7 +129,7 @@ func (client *ClientNode) handleSubmitCommand(tokenList []string) {
 	request := raft.RequestCommandRPC{
 		FromNode:    client.NodeCard,
 		CommandType: raft.AppendEntryCommand,
-		Message:     "Submit job " + jobFilePath,
+		//Message:     "Submit job " + jobFilePath,
 	}
 	_, err := client.sendMessageToLeader(request)
 	if err != nil {

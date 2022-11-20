@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Timelessprod/algorep/pkg/logging"
+	"github.com/Timelessprod/algorep/pkg/worker"
 	"go.uber.org/zap"
 )
 
@@ -88,14 +89,32 @@ func (s State) String() string {
 	return [...]string{"Follower", "Candidate", "Leader"}[s]
 }
 
+/****************
+ ** Entry Type **
+ ****************/
+
+type EntryType int
+
+const (
+	OpenJob  EntryType = iota
+	CloseJob EntryType = iota
+)
+
+// Convert an EntryType to a string
+func (e EntryType) String() string {
+	return [...]string{"OpenJob", "CloseJob"}[e]
+}
+
 /***************
  ** Log Entry **
  ***************/
 
-// LogEntry is an entry in the log
-type LogEntry struct {
-	Term    uint32
-	Command string
+// Entry is an entry in the log
+type Entry struct {
+	Type EntryType
+	Term uint32
+	WorkerId uint32
+	Job  worker.Job
 }
 
 /***************************
@@ -103,8 +122,8 @@ type LogEntry struct {
  ***************************/
 
 // Select range of log entries and return a new slice of log entries (start inclusive, end inclusive)
-func ExtractListFromMap(m *map[uint32]LogEntry, start uint32, end uint32) []LogEntry {
-	var list []LogEntry
+func ExtractListFromMap(m *map[uint32]Entry, start uint32, end uint32) []Entry {
+	var list []Entry
 	for i := start; i <= end; i++ {
 		list = append(list, (*m)[i])
 	}
@@ -112,7 +131,7 @@ func ExtractListFromMap(m *map[uint32]LogEntry, start uint32, end uint32) []LogE
 }
 
 // Flush the log entries after the given index. index + 1 and more are flushed but index is kept.
-func FlushAfterIndex(m *map[uint32]LogEntry, index uint32) {
+func FlushAfterIndex(m *map[uint32]Entry, index uint32) {
 	for i := range *m {
 		if i > index {
 			delete(*m, i)

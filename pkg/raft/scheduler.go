@@ -30,7 +30,7 @@ type SchedulerNode struct {
 
 	// Each entry contains command for state machine
 	// and term when entry was received by leader (first index is 1)
-	log map[uint32]LogEntry
+	log map[uint32]Entry
 	// Index of highest log entry known to be committed (initialized to 0, increases monotonically)
 	commitIndex uint32
 	// Index of highest log entry known to be replicated on other nodes (initialized to 0, increases monotonically)
@@ -61,7 +61,7 @@ func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 	node.ElectionTimeout = time.Duration(rand.Intn(durationRange)) + Config.MinElectionTimeout
 
 	// Initialize all elements used to store and replicate the log
-	node.log = make(map[uint32]LogEntry)
+	node.log = make(map[uint32]Entry)
 	node.commitIndex = 0
 	node.matchIndex = make([]uint32, Config.SchedulerNodeCount)
 	for i := range node.matchIndex {
@@ -152,13 +152,13 @@ func (node *SchedulerNode) printNodeStateInFile() {
 	fmt.Fprintln(f, ">>> NextIndex: ", node.nextIndex)
 	fmt.Fprintln(f, "### Log ###")
 	for i, entry := range node.log {
-		fmt.Fprintln(f, "[", i, "] ", "Term: ", entry.Term, " | Command: ", entry.Command)
+		fmt.Fprintln(f, "[", i, "] ", "Term: ", entry.Term, " | JobRef: ", entry.Job.GetReference(), " | Status: ", entry.Job.Status.String())
 	}
 	fmt.Fprintln(f, "----------------")
 }
 
 // Add a new entry to the log
-func (node *SchedulerNode) addEntryToLog(entry LogEntry) {
+func (node *SchedulerNode) addEntryToLog(entry Entry) {
 	index := node.nextIndex[node.Card.Id]
 	node.log[index] = entry
 	node.nextIndex[node.Card.Id] = index + 1
@@ -422,13 +422,13 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 	if node.State == LeaderState {
 		logger.Info("I am the leader ! Submit Job.... ",
 			zap.String("Node", node.Card.String()),
-			zap.String("Message", request.Message),
+			zap.String("JobRef", request.Entry.Job.GetReference()),
 		)
 		response.Success = true
 
-		entry := LogEntry{
-			Term:    node.CurrentTerm,
-			Command: request.Message,
+		entry := Entry{
+			Term: node.CurrentTerm,
+			//Command: request.Message,
 		}
 		node.addEntryToLog(entry)
 
