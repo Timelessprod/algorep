@@ -37,6 +37,8 @@ type ChannelContainer struct {
 
 	RequestVote  chan RequestVoteRPC
 	ResponseVote chan ResponseVoteRPC
+
+	JobQueue chan Job
 }
 
 /***************
