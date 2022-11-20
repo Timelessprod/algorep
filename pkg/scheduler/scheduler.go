@@ -11,7 +11,6 @@ import (
 
 	"github.com/Timelessprod/algorep/pkg/core"
 	"github.com/Timelessprod/algorep/pkg/utils"
-	"github.com/Timelessprod/algorep/pkg/worker"
 	"go.uber.org/zap"
 )
 
@@ -439,7 +438,7 @@ func (node *SchedulerNode) handleAppendEntryCommand(request core.RequestCommandR
 		entry.WorkerId = int(node.GetWorkerId())
 		entry.Job.Id = node.GetJobId()
 		entry.Job.Term = node.CurrentTerm
-		entry.Job.Status = worker.JobWaiting
+		entry.Job.Status = core.JobWaiting
 		node.addEntryToLog(entry)
 		response.Success = true
 

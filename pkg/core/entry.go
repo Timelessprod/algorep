@@ -1,7 +1,6 @@
 package core
 
 import (
-	"github.com/Timelessprod/algorep/pkg/worker"
 	"go.uber.org/zap"
 )
 
@@ -32,7 +31,7 @@ type Entry struct {
 	Type     EntryType
 	Term     uint32
 	WorkerId int
-	Job      worker.Job
+	Job      Job
 }
 
 /***************************

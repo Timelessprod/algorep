@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Timelessprod/algorep/pkg/core"
-	"github.com/Timelessprod/algorep/pkg/worker"
 	"go.uber.org/zap"
 )
 
@@ -127,13 +126,13 @@ func (client *ClientNode) handleSubmitCommand(tokenList []string) {
 	jobFilePath := tokenList[1]
 	fmt.Print("Submitting job ", jobFilePath, "... ")
 
-	job := worker.Job{
+	job := core.Job{
 		Input: jobFilePath, //TODO : Read file
 	}
 	entry := core.Entry{
 		Type:     core.OpenJob,
 		Job:      job,
-		WorkerId: worker.NO_WORKER,
+		WorkerId: core.NO_WORKER,
 	}
 	request := core.RequestCommandRPC{
 		FromNode:    client.NodeCard,
