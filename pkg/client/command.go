@@ -1,10 +1,10 @@
-package repl
+package client
 
 import (
 	"fmt"
 	"strconv"
 
-	"github.com/Timelessprod/algorep/pkg/raft"
+	"github.com/Timelessprod/algorep/pkg/core"
 )
 
 /******************
@@ -75,8 +75,8 @@ func parseNodeNumber(token string) (uint32, error) {
 	if err != nil {
 		return 0, fmt.Errorf("Invalid node number: %s", token)
 	}
-	if nodeId >= uint64(raft.Config.SchedulerNodeCount) {
-		return 0, fmt.Errorf("Node number should be between 0 and %d", raft.Config.SchedulerNodeCount-1)
+	if nodeId >= uint64(core.Config.SchedulerNodeCount) {
+		return 0, fmt.Errorf("Node number should be between 0 and %d", core.Config.SchedulerNodeCount-1)
 	}
 	return uint32(nodeId), nil
 }

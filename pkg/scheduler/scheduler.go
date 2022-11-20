@@ -1,4 +1,4 @@
-package raft
+package scheduler
 
 import (
 	"fmt"
@@ -9,9 +9,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Timelessprod/algorep/pkg/core"
+	"github.com/Timelessprod/algorep/pkg/utils"
 	"github.com/Timelessprod/algorep/pkg/worker"
 	"go.uber.org/zap"
 )
+
+var logger *zap.Logger = core.Logger
 
 /********************
  ** Scheduler Node **
@@ -20,8 +24,8 @@ import (
 // SchedulerNode is the node in charge of scheduling the database entries with the RAFT algorithm
 type SchedulerNode struct {
 	Id          uint32
-	Card        NodeCard
-	State       State
+	Card        core.NodeCard
+	State       core.State
 	CurrentTerm uint32
 	LeaderId    int
 
@@ -31,7 +35,7 @@ type SchedulerNode struct {
 
 	// Each entry contains command for state machine
 	// and term when entry was received by leader (first index is 1)
-	log map[uint32]Entry
+	log map[uint32]core.Entry
 	// Job id counter
 	jobIdCounter uint32
 	// Index of highest log entry known to be committed (initialized to 0, increases monotonically)
@@ -41,7 +45,7 @@ type SchedulerNode struct {
 	// Index of highest log entry available to store next entry (initialized to 1, increases monotonically)
 	nextIndex []uint32
 
-	Channel ChannelContainer
+	Channel core.ChannelContainer
 
 	IsStarted bool
 	IsCrashed bool
@@ -53,34 +57,34 @@ type SchedulerNode struct {
 // Init the scheduler node
 func (node *SchedulerNode) Init(id uint32) SchedulerNode {
 	node.Id = id
-	node.Card = NodeCard{Id: id, Type: SchedulerNodeType}
-	node.State = FollowerState
-	node.LeaderId = NO_NODE
-	node.VotedFor = NO_NODE
+	node.Card = core.NodeCard{Id: id, Type: core.SchedulerNodeType}
+	node.State = core.FollowerState
+	node.LeaderId = core.NO_NODE
+	node.VotedFor = core.NO_NODE
 	node.VoteCount = 0
 
 	// Compute random leaderIsAliveTimeout
-	durationRange := int(Config.MaxElectionTimeout - Config.MinElectionTimeout)
-	node.ElectionTimeout = time.Duration(rand.Intn(durationRange)) + Config.MinElectionTimeout
+	durationRange := int(core.Config.MaxElectionTimeout - core.Config.MinElectionTimeout)
+	node.ElectionTimeout = time.Duration(rand.Intn(durationRange)) + core.Config.MinElectionTimeout
 
 	// Initialize all elements used to store and replicate the log
-	node.log = make(map[uint32]Entry)
+	node.log = make(map[uint32]core.Entry)
 	node.jobIdCounter = 0
 	node.commitIndex = 0
-	node.matchIndex = make([]uint32, Config.SchedulerNodeCount)
+	node.matchIndex = make([]uint32, core.Config.SchedulerNodeCount)
 	for i := range node.matchIndex {
 		node.matchIndex[i] = 0
 	}
-	node.nextIndex = make([]uint32, Config.SchedulerNodeCount)
+	node.nextIndex = make([]uint32, core.Config.SchedulerNodeCount)
 	for i := range node.nextIndex {
 		node.nextIndex[i] = 1
 	}
 
 	// Initialize the channel container
-	node.Channel.RequestCommand = make(chan RequestCommandRPC, Config.ChannelBufferSize)
-	node.Channel.ResponseCommand = make(chan ResponseCommandRPC, Config.ChannelBufferSize)
-	node.Channel.RequestVote = make(chan RequestVoteRPC, Config.ChannelBufferSize)
-	node.Channel.ResponseVote = make(chan ResponseVoteRPC, Config.ChannelBufferSize)
+	node.Channel.RequestCommand = make(chan core.RequestCommandRPC, core.Config.ChannelBufferSize)
+	node.Channel.ResponseCommand = make(chan core.ResponseCommandRPC, core.Config.ChannelBufferSize)
+	node.Channel.RequestVote = make(chan core.RequestVoteRPC, core.Config.ChannelBufferSize)
+	node.Channel.ResponseVote = make(chan core.ResponseVoteRPC, core.Config.ChannelBufferSize)
 
 	// Initialize the state file
 	node.InitStateInFile()
@@ -118,7 +122,7 @@ func (node *SchedulerNode) Run(wg *sync.WaitGroup) {
 		}
 		node.printNodeStateInFile()
 		node.updateCommitIndex()
-		time.Sleep(Config.NodeSpeedList[node.Id])
+		time.Sleep(core.Config.NodeSpeedList[node.Id])
 	}
 }
 
@@ -162,7 +166,7 @@ func (node *SchedulerNode) printNodeStateInFile() {
 }
 
 // Add a new entry to the log
-func (node *SchedulerNode) addEntryToLog(entry Entry) {
+func (node *SchedulerNode) addEntryToLog(entry core.Entry) {
 	index := node.nextIndex[node.Card.Id]
 	node.log[index] = entry
 	node.nextIndex[node.Card.Id] = index + 1
@@ -173,12 +177,12 @@ func (node *SchedulerNode) addEntryToLog(entry Entry) {
 // getTimeOut returns the timeout duration depending on the node state
 func (node *SchedulerNode) getTimeOut() time.Duration {
 	switch node.State {
-	case FollowerState:
+	case core.FollowerState:
 		return node.ElectionTimeout
-	case CandidateState:
+	case core.CandidateState:
 		return node.ElectionTimeout
-	case LeaderState:
-		return Config.IsAliveNotificationInterval
+	case core.LeaderState:
+		return core.Config.IsAliveNotificationInterval
 	}
 	logger.Panic("Invalid node state", zap.String("Node", node.Card.String()), zap.Int("state", int(node.State)))
 	panic("Invalid node state")
@@ -191,13 +195,13 @@ func (node *SchedulerNode) handleTimeout() {
 		return
 	}
 	switch node.State {
-	case FollowerState:
+	case core.FollowerState:
 		logger.Warn("Leader does not respond", zap.String("Node", node.Card.String()), zap.Duration("electionTimeout", node.ElectionTimeout))
 		node.startNewElection()
-	case CandidateState:
+	case core.CandidateState:
 		logger.Warn("Too much time to get a majority vote", zap.String("Node", node.Card.String()), zap.Duration("electionTimeout", node.ElectionTimeout))
 		node.startNewElection()
-	case LeaderState:
+	case core.LeaderState:
 		logger.Info("It's time for the Leader to send an IsAlive notification to followers", zap.String("Node", node.Card.String()))
 		node.broadcastSynchronizeCommandRPC()
 	}
@@ -207,13 +211,13 @@ func (node *SchedulerNode) handleTimeout() {
 
 // broadcastRequestVote broadcasts a RequestVote RPC to all the nodes (except itself)
 func (node *SchedulerNode) broadcastRequestVote() {
-	for i := uint32(0); i < Config.SchedulerNodeCount; i++ {
+	for i := uint32(0); i < core.Config.SchedulerNodeCount; i++ {
 		if i != node.Id {
 			lastLogIndex := uint32(len(node.log))
-			channel := Config.NodeChannelMap[SchedulerNodeType][i].RequestVote
-			request := RequestVoteRPC{
+			channel := core.Config.NodeChannelMap[core.SchedulerNodeType][i].RequestVote
+			request := core.RequestVoteRPC{
 				FromNode:     node.Card,
-				ToNode:       NodeCard{Id: i, Type: SchedulerNodeType},
+				ToNode:       core.NodeCard{Id: i, Type: core.SchedulerNodeType},
 				Term:         node.CurrentTerm,
 				CandidateId:  node.Id,
 				LastLogIndex: lastLogIndex,
@@ -226,18 +230,18 @@ func (node *SchedulerNode) broadcastRequestVote() {
 
 // sendSynchronizeCommandRPC sends a SynchronizeCommand RPC to a node
 func (node *SchedulerNode) sendSynchronizeCommandRPC(nodeId uint32) {
-	channel := Config.NodeChannelMap[SchedulerNodeType][nodeId].RequestCommand
+	channel := core.Config.NodeChannelMap[core.SchedulerNodeType][nodeId].RequestCommand
 	lastIndex := uint32(len(node.log))
 
-	request := RequestCommandRPC{
+	request := core.RequestCommandRPC{
 		FromNode:    node.Card,
-		ToNode:      NodeCard{Id: nodeId, Type: SchedulerNodeType},
-		CommandType: SynchronizeCommand,
+		ToNode:      core.NodeCard{Id: nodeId, Type: core.SchedulerNodeType},
+		CommandType: core.SynchronizeCommand,
 
 		Term:        node.CurrentTerm,
 		PrevIndex:   node.nextIndex[nodeId] - 1,
 		PrevTerm:    node.LogTerm(node.nextIndex[nodeId] - 1),
-		Entries:     ExtractListFromMap(&node.log, node.nextIndex[nodeId], lastIndex),
+		Entries:     core.ExtractListFromMap(&node.log, node.nextIndex[nodeId], lastIndex),
 		CommitIndex: node.commitIndex,
 	}
 
@@ -246,7 +250,7 @@ func (node *SchedulerNode) sendSynchronizeCommandRPC(nodeId uint32) {
 
 // brodcastSynchronizeCommand sends a SynchronizeCommand to all nodes (except itself)
 func (node *SchedulerNode) broadcastSynchronizeCommandRPC() {
-	for i := uint32(0); i < Config.SchedulerNodeCount; i++ {
+	for i := uint32(0); i < core.Config.SchedulerNodeCount; i++ {
 		if i != node.Id {
 			node.sendSynchronizeCommandRPC(i)
 		}
@@ -258,7 +262,7 @@ func (node *SchedulerNode) broadcastSynchronizeCommandRPC() {
 // startElection starts an new election in sending a RequestVote RPC to all the nodes
 func (node *SchedulerNode) startNewElection() {
 	logger.Info("Start new election", zap.String("Node", node.Card.String()))
-	node.State = CandidateState
+	node.State = core.CandidateState
 	node.VoteCount = 1
 	node.CurrentTerm++
 	node.VotedFor = int32(node.Id)
@@ -304,7 +308,7 @@ func (node *SchedulerNode) handleRecoverCommand() {
 /*** HANDLE RPC ***/
 
 // handleRequestSynchronizeCommand handles the SynchronizeCommand to synchronize the entries and check if the leader is alive
-func (node *SchedulerNode) handleRequestSynchronizeCommand(request RequestCommandRPC) {
+func (node *SchedulerNode) handleRequestSynchronizeCommand(request core.RequestCommandRPC) {
 	if node.IsCrashed {
 		logger.Debug("Node is crashed. Ignore synchronize command",
 			zap.String("Node", node.Card.String()),
@@ -312,13 +316,13 @@ func (node *SchedulerNode) handleRequestSynchronizeCommand(request RequestComman
 		return
 	}
 
-	response := ResponseCommandRPC{
+	response := core.ResponseCommandRPC{
 		FromNode:    node.Card,
 		ToNode:      request.FromNode,
 		Term:        node.CurrentTerm,
 		CommandType: request.CommandType,
 	}
-	channel := Config.NodeChannelMap[request.FromNode.Type][request.FromNode.Id].ResponseCommand
+	channel := core.Config.NodeChannelMap[request.FromNode.Type][request.FromNode.Id].ResponseCommand
 
 	node.updateTerm(request.Term)
 
@@ -337,11 +341,11 @@ func (node *SchedulerNode) handleRequestSynchronizeCommand(request RequestComman
 	// Seul le leader peut envoyer des commandes Sync donc on met à jour leaderId
 	node.LeaderId = int(request.FromNode.Id)
 
-	if node.State != FollowerState {
+	if node.State != core.FollowerState {
 		logger.Info("Node become Follower",
 			zap.String("Node", node.Card.String()),
 		)
-		node.State = FollowerState
+		node.State = core.FollowerState
 	}
 
 	lastLogConsistency := node.LogTerm(request.PrevIndex) == request.PrevTerm &&
@@ -366,8 +370,8 @@ func (node *SchedulerNode) handleRequestSynchronizeCommand(request RequestComman
 				node.log[index] = request.Entries[j]
 			}
 		}
-		FlushAfterIndex(&node.log, index)
-		node.commitIndex = MinUint32(request.CommitIndex, index)
+		core.FlushAfterIndex(&node.log, index)
+		node.commitIndex = utils.MinUint32(request.CommitIndex, index)
 	} else {
 		index = 0
 	}
@@ -378,7 +382,7 @@ func (node *SchedulerNode) handleRequestSynchronizeCommand(request RequestComman
 }
 
 // handleResponseSynchronizeCommand handles the response of the SynchronizeCommand
-func (node *SchedulerNode) handleResponseSynchronizeCommand(response ResponseCommandRPC) {
+func (node *SchedulerNode) handleResponseSynchronizeCommand(response core.ResponseCommandRPC) {
 	if node.IsCrashed {
 		logger.Debug("Node is crashed. Ignore synchronize command",
 			zap.String("Node", node.Card.String()),
@@ -394,19 +398,19 @@ func (node *SchedulerNode) handleResponseSynchronizeCommand(response ResponseCom
 	)
 
 	node.updateTerm(response.Term)
-	if node.State == LeaderState && node.CurrentTerm == response.Term {
+	if node.State == core.LeaderState && node.CurrentTerm == response.Term {
 		fromNode := response.FromNode.Id
 		if response.Success {
 			node.matchIndex[fromNode] = response.MatchIndex
 			node.nextIndex[fromNode] = response.MatchIndex + 1
 		} else {
-			node.nextIndex[fromNode] = MaxUint32(1, node.nextIndex[fromNode]-1)
+			node.nextIndex[fromNode] = utils.MaxUint32(1, node.nextIndex[fromNode]-1)
 		}
 	}
 }
 
 // handleAppendEntryCommand handles the AppendEntryCommand sent to the leader to append an entry to the log and ignore the command if the node is not the leader
-func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
+func (node *SchedulerNode) handleAppendEntryCommand(request core.RequestCommandRPC) {
 	if node.IsCrashed {
 		logger.Debug("Node is crashed. Ignore AppendEntry command",
 			zap.String("Node", node.Card.String()),
@@ -414,8 +418,8 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 		return
 	}
 
-	channel := Config.NodeChannelMap[request.FromNode.Type][request.FromNode.Id].ResponseCommand
-	response := ResponseCommandRPC{
+	channel := core.Config.NodeChannelMap[request.FromNode.Type][request.FromNode.Id].ResponseCommand
+	response := core.ResponseCommandRPC{
 		FromNode:    node.Card,
 		ToNode:      request.FromNode,
 		Term:        node.CurrentTerm,
@@ -423,7 +427,7 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 		LeaderId:    node.LeaderId,
 	}
 
-	if node.State == LeaderState {
+	if node.State == core.LeaderState {
 		entry := request.Entries[0] // Append only one entry at a time
 
 		logger.Info("I am the leader ! Submit Job.... ",
@@ -451,28 +455,28 @@ func (node *SchedulerNode) handleAppendEntryCommand(request RequestCommandRPC) {
 }
 
 //  handleRequestCommandRPC handles the command RPC sent to the node
-func (node *SchedulerNode) handleRequestCommandRPC(request RequestCommandRPC) {
+func (node *SchedulerNode) handleRequestCommandRPC(request core.RequestCommandRPC) {
 	logger.Debug("Handle Request Command RPC",
 		zap.String("FromNode", request.FromNode.String()),
 		zap.String("ToNode", request.ToNode.String()),
 		zap.String("CommandType", request.CommandType.String()),
 	)
 	switch request.CommandType {
-	case SynchronizeCommand:
+	case core.SynchronizeCommand:
 		node.handleRequestSynchronizeCommand(request)
-	case AppendEntryCommand:
+	case core.AppendEntryCommand:
 		node.handleAppendEntryCommand(request)
-	case StartCommand:
+	case core.StartCommand:
 		node.handleStartCommand()
-	case CrashCommand:
+	case core.CrashCommand:
 		node.handleCrashCommand()
-	case RecoverCommand:
+	case core.RecoverCommand:
 		node.handleRecoverCommand()
 	}
 }
 
 // handleResponseCommandRPC handles the response command RPC sent to the node
-func (node *SchedulerNode) handleResponseCommandRPC(response ResponseCommandRPC) {
+func (node *SchedulerNode) handleResponseCommandRPC(response core.ResponseCommandRPC) {
 	logger.Debug("Handle Response Command RPC",
 		zap.String("FromNode", response.FromNode.String()),
 		zap.String("ToNode", response.ToNode.String()),
@@ -480,7 +484,7 @@ func (node *SchedulerNode) handleResponseCommandRPC(response ResponseCommandRPC)
 		zap.Bool("success", response.Success),
 	)
 	switch response.CommandType {
-	case SynchronizeCommand:
+	case core.SynchronizeCommand:
 		node.handleResponseSynchronizeCommand(response)
 	default:
 		logger.Error("Unknown response command type",
@@ -490,7 +494,7 @@ func (node *SchedulerNode) handleResponseCommandRPC(response ResponseCommandRPC)
 }
 
 // handleRequestVoteRPC handles the request vote RPC sent to the node
-func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
+func (node *SchedulerNode) handleRequestVoteRPC(request core.RequestVoteRPC) {
 	if node.IsCrashed {
 		logger.Debug("Node is crashed. Ignore request vote RPC",
 			zap.String("FromNode", request.FromNode.String()),
@@ -506,8 +510,8 @@ func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
 
 	node.updateTerm(request.Term)
 
-	channel := Config.NodeChannelMap[SchedulerNodeType][request.FromNode.Id].ResponseVote
-	response := ResponseVoteRPC{
+	channel := core.Config.NodeChannelMap[core.SchedulerNodeType][request.FromNode.Id].ResponseVote
+	response := core.ResponseVoteRPC{
 		FromNode:    request.ToNode,
 		ToNode:      request.FromNode,
 		Term:        node.CurrentTerm,
@@ -540,7 +544,7 @@ func (node *SchedulerNode) handleRequestVoteRPC(request RequestVoteRPC) {
 }
 
 // handleResponseVoteRPC handles the response vote RPC sent to the node
-func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
+func (node *SchedulerNode) handleResponseVoteRPC(response core.ResponseVoteRPC) {
 	if node.IsCrashed {
 		logger.Debug("Node is crashed. Ignore request vote RPC",
 			zap.String("FromNode", response.FromNode.String()),
@@ -556,14 +560,14 @@ func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 	)
 
 	node.updateTerm(response.Term)
-	if node.State == CandidateState &&
+	if node.State == core.CandidateState &&
 		node.CurrentTerm == response.Term {
 
 		if response.VoteGranted {
 			node.VoteCount++
 
 			// When a candidate wins an election, it becomes leader.
-			if node.VoteCount > Config.SchedulerNodeCount/2 {
+			if node.VoteCount > core.Config.SchedulerNodeCount/2 {
 				node.becomeLeader()
 				return
 			}
@@ -579,10 +583,10 @@ func (node *SchedulerNode) handleResponseVoteRPC(response ResponseVoteRPC) {
 
 // becomeLeader sets the node as leader
 func (node *SchedulerNode) becomeLeader() {
-	node.State = LeaderState
+	node.State = core.LeaderState
 	node.LeaderId = int(node.Card.Id)
 	logger.Info("Leader elected", zap.String("Node", node.Card.String()))
-	for nodeId := uint32(0); nodeId < Config.SchedulerNodeCount; nodeId++ {
+	for nodeId := uint32(0); nodeId < core.Config.SchedulerNodeCount; nodeId++ {
 		node.nextIndex[nodeId] = uint32(len(node.log)) + 1
 	}
 	node.jobIdCounter = 0
@@ -598,14 +602,14 @@ func (node *SchedulerNode) updateTerm(term uint32) {
 			zap.String("OldState", node.State.String()),
 		)
 		node.CurrentTerm = term
-		node.State = FollowerState
-		node.VotedFor = NO_NODE
+		node.State = core.FollowerState
+		node.VotedFor = core.NO_NODE
 	}
 }
 
 // checkVote checks if the node has already voted for the candidate
 func (node *SchedulerNode) checkVote(candidateId uint32) bool {
-	if node.VotedFor == NO_NODE || uint32(node.VotedFor) == candidateId {
+	if node.VotedFor == core.NO_NODE || uint32(node.VotedFor) == candidateId {
 		return true
 	}
 	return false
@@ -621,7 +625,7 @@ func (node *SchedulerNode) LogTerm(i uint32) uint32 {
 
 // updateCommitIndex updates the commit index of the node
 func (node *SchedulerNode) updateCommitIndex() {
-	if node.State != LeaderState {
+	if node.State != core.LeaderState {
 		return
 	}
 
@@ -630,7 +634,7 @@ func (node *SchedulerNode) updateCommitIndex() {
 	copy(matchIndexMedianList, node.matchIndex)
 	matchIndexMedianList = append(matchIndexMedianList, uint32(len(node.log)))
 	sort.Slice(matchIndexMedianList, func(i, j int) bool { return matchIndexMedianList[i] < matchIndexMedianList[j] })
-	median := matchIndexMedianList[Config.SchedulerNodeCount/2]
+	median := matchIndexMedianList[core.Config.SchedulerNodeCount/2]
 
 	if node.LogTerm(median) == node.CurrentTerm {
 		node.commitIndex = median

@@ -1,4 +1,4 @@
-package raft
+package core
 
 // Generic RPC Type
 type RPCType interface {

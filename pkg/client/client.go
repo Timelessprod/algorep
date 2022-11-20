@@ -1,4 +1,4 @@
-package repl
+package client
 
 import (
 	"bufio"
@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/Timelessprod/algorep/pkg/core"
-	"github.com/Timelessprod/algorep/pkg/raft"
 	"github.com/Timelessprod/algorep/pkg/worker"
 	"go.uber.org/zap"
 )
@@ -21,7 +20,7 @@ var logger *zap.Logger = core.Logger
 
 // GetRandomSchedulerNodeId returns a random scheduler node id
 func GetRandomSchedulerNodeId() uint32 {
-	return uint32(rand.Intn(int(raft.Config.SchedulerNodeCount)))
+	return uint32(rand.Intn(int(core.Config.SchedulerNodeCount)))
 }
 
 // printPrompt prints the prompt before reading a command
@@ -35,20 +34,20 @@ func printPrompt() {
 
 type ClientNode struct {
 	Id               uint32
-	NodeCard         raft.NodeCard
+	NodeCard         core.NodeCard
 	LastLeaderId     uint32
 	ClusterIsStarted bool
 
-	Channel raft.ChannelContainer
+	Channel core.ChannelContainer
 }
 
 // Init initializes the client node
 func (client *ClientNode) Init(id uint32) {
 	client.Id = id
-	client.NodeCard = raft.NodeCard{Id: id, Type: raft.ClientNodeType}
-	client.Channel = raft.ChannelContainer{
-		RequestCommand:  make(chan raft.RequestCommandRPC, raft.Config.ChannelBufferSize),
-		ResponseCommand: make(chan raft.ResponseCommandRPC, raft.Config.ChannelBufferSize),
+	client.NodeCard = core.NodeCard{Id: id, Type: core.ClientNodeType}
+	client.Channel = core.ChannelContainer{
+		RequestCommand:  make(chan core.RequestCommandRPC, core.Config.ChannelBufferSize),
+		ResponseCommand: make(chan core.ResponseCommandRPC, core.Config.ChannelBufferSize),
 	}
 	client.LastLeaderId = 0 // Valeur par défaut le temps de trouver le leader
 	client.ClusterIsStarted = false
@@ -71,17 +70,17 @@ func (client *ClientNode) Run() {
 }
 
 // sendMessageToLeader sends a message to the leader
-func (client *ClientNode) sendMessageToLeader(message raft.RequestCommandRPC) (*raft.ResponseCommandRPC, error) {
-	for i := 0; i < int(raft.Config.MaxRetryToFindLeader); i++ {
-		requestChannel := raft.Config.NodeChannelMap[raft.SchedulerNodeType][client.LastLeaderId].RequestCommand
-		responseChannel := raft.Config.NodeChannelMap[client.NodeCard.Type][client.NodeCard.Id].ResponseCommand
-		message.ToNode = raft.NodeCard{Id: client.LastLeaderId, Type: raft.SchedulerNodeType}
+func (client *ClientNode) sendMessageToLeader(message core.RequestCommandRPC) (*core.ResponseCommandRPC, error) {
+	for i := 0; i < int(core.Config.MaxRetryToFindLeader); i++ {
+		requestChannel := core.Config.NodeChannelMap[core.SchedulerNodeType][client.LastLeaderId].RequestCommand
+		responseChannel := core.Config.NodeChannelMap[client.NodeCard.Type][client.NodeCard.Id].ResponseCommand
+		message.ToNode = core.NodeCard{Id: client.LastLeaderId, Type: core.SchedulerNodeType}
 		requestChannel <- message
 		select {
 		case response := <-responseChannel:
 			// If LeaderId given by node is -1
 			// it means that node does not know who is the leader
-			if response.LeaderId == raft.NO_NODE {
+			if response.LeaderId == core.NO_NODE {
 				logger.Warn("Leader is unknown. Check random node !",
 					zap.Uint32("tested nodeId", client.LastLeaderId),
 				)
@@ -101,7 +100,7 @@ func (client *ClientNode) sendMessageToLeader(message raft.RequestCommandRPC) (*
 
 			// Else if the tested node is the leader
 			return &response, nil
-		case <-time.After(raft.Config.MaxFindLeaderTimeout):
+		case <-time.After(core.Config.MaxFindLeaderTimeout):
 			logger.Warn("Node is not responding, trying to find new leader with random node...",
 				zap.Int("try", i+1),
 				zap.Uint32("tested nodeId", client.LastLeaderId),
@@ -125,23 +124,21 @@ func (client *ClientNode) handleSubmitCommand(tokenList []string) {
 		return
 	}
 
-
 	jobFilePath := tokenList[1]
 	fmt.Print("Submitting job ", jobFilePath, "... ")
-
 
 	job := worker.Job{
 		Input: jobFilePath, //TODO : Read file
 	}
-	entry := raft.Entry{
-		Type:     raft.OpenJob,
+	entry := core.Entry{
+		Type:     core.OpenJob,
 		Job:      job,
 		WorkerId: worker.NO_WORKER,
 	}
-	request := raft.RequestCommandRPC{
+	request := core.RequestCommandRPC{
 		FromNode:    client.NodeCard,
-		CommandType: raft.AppendEntryCommand,
-		Entries:     []raft.Entry{entry},
+		CommandType: core.AppendEntryCommand,
+		Entries:     []core.Entry{entry},
 	}
 
 	_, err := client.sendMessageToLeader(request)
@@ -166,12 +163,12 @@ func (client *ClientNode) handleCrashCommand(tokenList []string) {
 	}
 	fmt.Print("Crashing the node ", nodeId, "... ")
 	logger.Warn("Crash a node", zap.Uint32("nodeId", nodeId))
-	request := raft.RequestCommandRPC{
+	request := core.RequestCommandRPC{
 		FromNode:    client.NodeCard,
-		ToNode:      raft.NodeCard{Id: nodeId, Type: raft.SchedulerNodeType},
-		CommandType: raft.CrashCommand,
+		ToNode:      core.NodeCard{Id: nodeId, Type: core.SchedulerNodeType},
+		CommandType: core.CrashCommand,
 	}
-	raft.Config.NodeChannelMap[raft.SchedulerNodeType][nodeId].RequestCommand <- request
+	core.Config.NodeChannelMap[core.SchedulerNodeType][nodeId].RequestCommand <- request
 	fmt.Println("Done.")
 }
 
@@ -188,12 +185,12 @@ func (client *ClientNode) handleRecoverCommand(tokenList []string) {
 	}
 	fmt.Print("Recovering the node ", nodeId, "... ")
 	logger.Warn("Recover a node", zap.Uint32("nodeId", nodeId))
-	request := raft.RequestCommandRPC{
+	request := core.RequestCommandRPC{
 		FromNode:    client.NodeCard,
-		ToNode:      raft.NodeCard{Id: nodeId, Type: raft.SchedulerNodeType},
-		CommandType: raft.RecoverCommand,
+		ToNode:      core.NodeCard{Id: nodeId, Type: core.SchedulerNodeType},
+		CommandType: core.RecoverCommand,
 	}
-	raft.Config.NodeChannelMap[raft.SchedulerNodeType][nodeId].RequestCommand <- request
+	core.Config.NodeChannelMap[core.SchedulerNodeType][nodeId].RequestCommand <- request
 	fmt.Println("Done.")
 }
 
@@ -208,11 +205,11 @@ func (client *ClientNode) handleSpeedCommand(tokenList []string) {
 	var latency time.Duration
 	switch levelToken {
 	case LOW_SPEED.String():
-		latency = raft.LowNodeSpeed
+		latency = core.LowNodeSpeed
 	case MEDIUM_SPEED.String():
-		latency = raft.MediumNodeSpeed
+		latency = core.MediumNodeSpeed
 	case HIGH_SPEED.String():
-		latency = raft.HighNodeSpeed
+		latency = core.HighNodeSpeed
 	default:
 		fmt.Println(INVALID_SPEED_LEVEL_MESSAGE)
 		fmt.Println(SPEED_COMMAND_USAGE)
@@ -230,7 +227,7 @@ func (client *ClientNode) handleSpeedCommand(tokenList []string) {
 		zap.String("speed", levelToken),
 		zap.Duration("latency", latency),
 	)
-	raft.Config.NodeSpeedList[nodeId] = latency
+	core.Config.NodeSpeedList[nodeId] = latency
 	fmt.Println("Done.")
 }
 
@@ -238,11 +235,11 @@ func (client *ClientNode) handleSpeedCommand(tokenList []string) {
 func (client *ClientNode) handleStartCommand() {
 	fmt.Print("Starting all nodes... ")
 	client.ClusterIsStarted = true
-	for index, channelContainer := range raft.Config.NodeChannelMap[raft.SchedulerNodeType] {
-		request := raft.RequestCommandRPC{
+	for index, channelContainer := range core.Config.NodeChannelMap[core.SchedulerNodeType] {
+		request := core.RequestCommandRPC{
 			FromNode:    client.NodeCard,
-			ToNode:      raft.NodeCard{Id: uint32(index), Type: raft.SchedulerNodeType},
-			CommandType: raft.StartCommand,
+			ToNode:      core.NodeCard{Id: uint32(index), Type: core.SchedulerNodeType},
+			CommandType: core.StartCommand,
 		}
 		channelContainer.RequestCommand <- request
 	}
