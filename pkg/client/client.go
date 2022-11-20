@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -16,11 +15,6 @@ import (
 var logger *zap.Logger = core.Logger
 
 /*** UTILS ***/
-
-// GetRandomSchedulerNodeId returns a random scheduler node id
-func GetRandomSchedulerNodeId() uint32 {
-	return uint32(rand.Intn(int(core.Config.SchedulerNodeCount)))
-}
 
 // printPrompt prints the prompt before reading a command
 func printPrompt() {
@@ -83,7 +77,7 @@ func (client *ClientNode) sendMessageToLeader(message core.RequestCommandRPC) (*
 				logger.Warn("Leader is unknown. Check random node !",
 					zap.Uint32("tested nodeId", client.LastLeaderId),
 				)
-				client.LastLeaderId = GetRandomSchedulerNodeId()
+				client.LastLeaderId = core.GetRandomSchedulerNodeId()
 				continue
 			}
 
@@ -104,7 +98,7 @@ func (client *ClientNode) sendMessageToLeader(message core.RequestCommandRPC) (*
 				zap.Int("try", i+1),
 				zap.Uint32("tested nodeId", client.LastLeaderId),
 			)
-			client.LastLeaderId = GetRandomSchedulerNodeId()
+			client.LastLeaderId = core.GetRandomSchedulerNodeId()
 		}
 	}
 	logger.Error("No response from leader after several tries")

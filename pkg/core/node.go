@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
 )
 
@@ -83,4 +84,13 @@ const (
 // Convert a State to a string
 func (s State) String() string {
 	return [...]string{"Follower", "Candidate", "Leader"}[s]
+}
+
+/****************
+ ** Node Utils **
+ ****************/
+
+// GetRandomSchedulerNodeId returns a random scheduler node id
+func GetRandomSchedulerNodeId() uint32 {
+	return uint32(rand.Intn(int(Config.SchedulerNodeCount)))
 }
