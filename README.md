@@ -46,7 +46,7 @@ use another shell than bash, please adapt the last line in consequence.
 ### C.2) Import, build and run the project
 
 Finally, you can simply : 
-* clone the repository and 
+* clone the repository 
 * run `make` at the root of the project
   
 ### C.3) How to use the project
