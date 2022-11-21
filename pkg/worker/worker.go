@@ -1,6 +1,10 @@
 package worker
 
 import (
+	"bytes"
+	"fmt"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/Timelessprod/algorep/pkg/core"
@@ -53,13 +57,89 @@ func (node *WorkerNode) processJob(job core.Job) {
 		zap.String("Input", job.Input),
 		zap.String("Output", job.Output),
 	)
-	// TODO : exec the job
-	// sleep 1 second
-	time.Sleep(1 * time.Second)
 
+	// Execute the job
+	node.ExecuteJob(&job)
+
+	// Close the job
 	job.State = core.JobDone
-	job.Output = "MyBeautifulOutput"
 	node.closeJob(job)
+}
+
+// ExecuteJob executes a job
+func (node *WorkerNode) ExecuteJob(job *core.Job) {
+	logger.Info("Execute job",
+		zap.String("Node", node.Card.String()),
+		zap.String("Job", job.GetReference()),
+	)
+
+	reference := job.GetReference()
+	binaryName := fmt.Sprintf("job-%s.out", reference)
+
+	// Compile the job
+	logger.Debug("Compiling job ...",
+		zap.String("Node", node.Card.String()),
+		zap.String("Job", job.GetReference()),
+		zap.String("BinaryName", binaryName),
+	)
+	compileCommand := exec.Command("g++", "-o", binaryName, "-x", "c++", "-")
+	compileCommand.Stdin = strings.NewReader(job.Input)
+	var stdoutCompile, stderrCompile bytes.Buffer
+	compileCommand.Stdout = &stdoutCompile
+	compileCommand.Stderr = &stderrCompile
+	err := compileCommand.Run()
+	if err != nil {
+		logger.Error("Error while compiling job",
+			zap.String("Node", node.Card.String()),
+			zap.String("Job", job.GetReference()),
+			zap.String("Error", err.Error()),
+		)
+		errorPrompt := "--- Error while compiling job ---\n%s--- StdOut ---\n%s---StdError---%s"
+		job.Output = fmt.Sprintf(errorPrompt, err.Error(), stdoutCompile.String(), stderrCompile.String())
+		return
+	}
+
+	// Run the binary
+	logger.Debug("Running job ...",
+		zap.String("Node", node.Card.String()),
+		zap.String("Job", job.GetReference()),
+		zap.String("BinaryName", binaryName),
+	)
+	runCommandString := fmt.Sprintf("./%s", binaryName)
+	runCommand := exec.Command(runCommandString)
+	var stdoutRun, stderrRun bytes.Buffer
+	runCommand.Stdout = &stdoutRun
+	runCommand.Stderr = &stderrRun
+	err = runCommand.Run()
+	if err != nil {
+		logger.Error("Error while running job",
+			zap.String("Node", node.Card.String()),
+			zap.String("Job", job.GetReference()),
+			zap.String("Error", err.Error()),
+		)
+	}
+	job.Output = fmt.Sprint(stdoutRun.String(), stderrRun.String())
+	logger.Debug("Job has been executed",
+		zap.String("Node", node.Card.String()),
+		zap.String("Job", job.GetReference()),
+		zap.String("Output", job.Output),
+	)
+
+	// Remove the binary
+	logger.Debug("Removing binary ...",
+		zap.String("Node", node.Card.String()),
+		zap.String("Job", job.GetReference()),
+		zap.String("BinaryName", binaryName),
+	)
+	removeComand := exec.Command("rm", "-f", binaryName)
+	err = removeComand.Run()
+	if err != nil {
+		logger.Error("Error while removing binary",
+			zap.String("Node", node.Card.String()),
+			zap.String("Job", job.GetReference()),
+			zap.String("Error", err.Error()),
+		)
+	}
 }
 
 // closeJob closes a job

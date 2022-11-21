@@ -314,7 +314,6 @@ func (client *ClientNode) handleStartCommand() {
 		}
 		channelContainer.RequestCommand <- request
 	}
-	//TODO : send start command to Worker nodes
 	fmt.Println("Done.")
 }
 
