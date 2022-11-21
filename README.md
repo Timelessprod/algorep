@@ -46,4 +46,4 @@ Finally, you can simply clone the repository and run `make` at its root.
 
 Current advancements on the project, regarding completed steps :
 
-![](https://geps.dev/progress/72)
+![](https://geps.dev/progress/100)
