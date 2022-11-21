@@ -1,27 +1,20 @@
-package repl
+package client
 
 import (
 	"bufio"
 	"errors"
 	"fmt"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/Timelessprod/algorep/pkg/logging"
-	"github.com/Timelessprod/algorep/pkg/raft"
+	"github.com/Timelessprod/algorep/pkg/core"
 	"go.uber.org/zap"
 )
 
-var logger *zap.Logger = logging.Logger
+var logger *zap.Logger = core.Logger
 
 /*** UTILS ***/
-
-// GetRandomSchedulerNodeId returns a random scheduler node id
-func GetRandomSchedulerNodeId() uint32 {
-	return uint32(rand.Intn(int(raft.Config.SchedulerNodeCount)))
-}
 
 // printPrompt prints the prompt before reading a command
 func printPrompt() {
@@ -34,20 +27,20 @@ func printPrompt() {
 
 type ClientNode struct {
 	Id               uint32
-	NodeCard         raft.NodeCard
+	NodeCard         core.NodeCard
 	LastLeaderId     uint32
 	ClusterIsStarted bool
 
-	Channel raft.ChannelContainer
+	Channel core.ChannelContainer
 }
 
 // Init initializes the client node
 func (client *ClientNode) Init(id uint32) {
 	client.Id = id
-	client.NodeCard = raft.NodeCard{Id: id, Type: raft.ClientNodeType}
-	client.Channel = raft.ChannelContainer{
-		RequestCommand:  make(chan raft.RequestCommandRPC, raft.Config.ChannelBufferSize),
-		ResponseCommand: make(chan raft.ResponseCommandRPC, raft.Config.ChannelBufferSize),
+	client.NodeCard = core.NodeCard{Id: id, Type: core.ClientNodeType}
+	client.Channel = core.ChannelContainer{
+		RequestCommand:  make(chan core.RequestCommandRPC, core.Config.ChannelBufferSize),
+		ResponseCommand: make(chan core.ResponseCommandRPC, core.Config.ChannelBufferSize),
 	}
 	client.LastLeaderId = 0 // Valeur par défaut le temps de trouver le leader
 	client.ClusterIsStarted = false
@@ -70,21 +63,21 @@ func (client *ClientNode) Run() {
 }
 
 // sendMessageToLeader sends a message to the leader
-func (client *ClientNode) sendMessageToLeader(message raft.RequestCommandRPC) (*raft.ResponseCommandRPC, error) {
-	for i := 0; i < int(raft.Config.MaxRetryToFindLeader); i++ {
-		requestChannel := raft.Config.NodeChannelMap[raft.SchedulerNodeType][client.LastLeaderId].RequestCommand
-		responseChannel := raft.Config.NodeChannelMap[client.NodeCard.Type][client.NodeCard.Id].ResponseCommand
-		message.ToNode = raft.NodeCard{Id: client.LastLeaderId, Type: raft.SchedulerNodeType}
+func (client *ClientNode) sendMessageToLeader(message core.RequestCommandRPC) (*core.ResponseCommandRPC, error) {
+	for i := 0; i < int(core.Config.MaxRetryToFindLeader); i++ {
+		requestChannel := core.Config.NodeChannelMap[core.SchedulerNodeType][client.LastLeaderId].RequestCommand
+		responseChannel := core.Config.NodeChannelMap[client.NodeCard.Type][client.NodeCard.Id].ResponseCommand
+		message.ToNode = core.NodeCard{Id: client.LastLeaderId, Type: core.SchedulerNodeType}
 		requestChannel <- message
 		select {
 		case response := <-responseChannel:
 			// If LeaderId given by node is -1
 			// it means that node does not know who is the leader
-			if response.LeaderId == raft.NO_NODE {
+			if response.LeaderId == core.NO_NODE {
 				logger.Warn("Leader is unknown. Check random node !",
 					zap.Uint32("tested nodeId", client.LastLeaderId),
 				)
-				client.LastLeaderId = GetRandomSchedulerNodeId()
+				client.LastLeaderId = core.GetRandomSchedulerNodeId()
 				continue
 			}
 
@@ -100,12 +93,12 @@ func (client *ClientNode) sendMessageToLeader(message raft.RequestCommandRPC) (*
 
 			// Else if the tested node is the leader
 			return &response, nil
-		case <-time.After(raft.Config.MaxFindLeaderTimeout):
+		case <-time.After(core.Config.MaxFindLeaderTimeout):
 			logger.Warn("Node is not responding, trying to find new leader with random node...",
 				zap.Int("try", i+1),
 				zap.Uint32("tested nodeId", client.LastLeaderId),
 			)
-			client.LastLeaderId = GetRandomSchedulerNodeId()
+			client.LastLeaderId = core.GetRandomSchedulerNodeId()
 		}
 	}
 	logger.Error("No response from leader after several tries")
@@ -126,20 +119,106 @@ func (client *ClientNode) handleSubmitCommand(tokenList []string) {
 
 	jobFilePath := tokenList[1]
 	fmt.Print("Submitting job ", jobFilePath, "... ")
-	request := raft.RequestCommandRPC{
-		FromNode:    client.NodeCard,
-		CommandType: raft.AppendEntryCommand,
-		Message:     "Submit job " + jobFilePath,
+	input, loadErr := core.LoadCodeFromFile(jobFilePath)
+	if loadErr != nil {
+		fmt.Println("Error while loading job file : ", loadErr)
+		return
 	}
-	_, err := client.sendMessageToLeader(request)
+
+	job := core.Job{
+		Input:    input,
+		WorkerId: core.NO_WORKER,
+	}
+	entry := core.Entry{
+		Type: core.OpenJob,
+		Job:  job,
+	}
+	request := core.RequestCommandRPC{
+		FromNode:    client.NodeCard,
+		CommandType: core.AppendEntryCommand,
+		Entries:     []core.Entry{entry},
+	}
+
+	_, sendErr := client.sendMessageToLeader(request)
+	if sendErr != nil {
+		fmt.Println("Error: ", sendErr)
+		return
+	}
+	fmt.Println("Done.")
+}
+
+// handleStatusCommand handles the status command
+func (client *ClientNode) handleStatusCommand(tokenList []string) {
+	if len(tokenList) > 2 {
+		fmt.Println(STATUS_COMMAND_USAGE)
+		return
+	}
+
+	if !client.ClusterIsStarted {
+		fmt.Println(NOT_STARTED_MESSAGE)
+		return
+	}
+
+	// If the job reference is given
+	JobReference := ""
+	if len(tokenList) == 2 {
+		JobReference = tokenList[1]
+	}
+
+	fmt.Print("Getting status... ")
+
+	request := core.RequestCommandRPC{
+		FromNode:    client.NodeCard,
+		CommandType: core.StatusCommand,
+	}
+
+	response, err := client.sendMessageToLeader(request)
 	if err != nil {
 		fmt.Println("Error: ", err)
 		return
 	}
-	//TODO : check path and read file
-	//TODO : send job to leader
-	//TODO : read response
+
+	JobMap := response.JobMap
+
+	// If no argument is given, print the status of the cluster
+	if JobReference == "" {
+		fmt.Println("Done.")
+		printAllJobs(JobMap)
+		return
+	}
+
+	// Else, print the status of the given job
+	job, ok := JobMap[JobReference]
+	if !ok {
+		fmt.Println(INVALID_JOB_REFERENCE_MESSAGE)
+		return
+	}
+	// Print all the job status
 	fmt.Println("Done.")
+	printJobStatus(job)
+
+}
+
+// printAllJobs prints all the jobs in the cluster
+func printAllJobs(JobMap map[string]core.Job) {
+	format := "%10s | %7s | %10s |\n"
+	fmt.Printf(format, "Reference", "Worker", "State")
+	fmt.Printf(format, "----------", "-------", "----------")
+	for reference, job := range JobMap {
+		fmt.Printf(format, reference, fmt.Sprint(job.WorkerId), job.State)
+	}
+}
+
+// printJobStatus prints the status of a given job
+func printJobStatus(job core.Job) {
+	fmt.Println("### JOB STATUS ###")
+	fmt.Println("> Reference : ", job.GetReference())
+	fmt.Println("> Worker Id : ", job.WorkerId)
+	fmt.Println("> State : ", job.State)
+	fmt.Println("-- Input --\n", job.Input)
+	fmt.Println("\n\n-- Output --\n", job.Output)
+	fmt.Println("\n\n##################")
+
 }
 
 // handleStartCommand handles the start cluster command
@@ -155,16 +234,16 @@ func (client *ClientNode) handleCrashCommand(tokenList []string) {
 	}
 	fmt.Print("Crashing the node ", nodeId, "... ")
 	logger.Warn("Crash a node", zap.Uint32("nodeId", nodeId))
-	request := raft.RequestCommandRPC{
+	request := core.RequestCommandRPC{
 		FromNode:    client.NodeCard,
-		ToNode:      raft.NodeCard{Id: nodeId, Type: raft.SchedulerNodeType},
-		CommandType: raft.CrashCommand,
+		ToNode:      core.NodeCard{Id: nodeId, Type: core.SchedulerNodeType},
+		CommandType: core.CrashCommand,
 	}
-	raft.Config.NodeChannelMap[raft.SchedulerNodeType][nodeId].RequestCommand <- request
+	core.Config.NodeChannelMap[core.SchedulerNodeType][nodeId].RequestCommand <- request
 	fmt.Println("Done.")
 }
 
-// handleReplCommand handles the recover command
+// handleRecoverCommand handles the recover command
 func (client *ClientNode) handleRecoverCommand(tokenList []string) {
 	if len(tokenList) != 2 {
 		fmt.Println(RECOVER_COMMAND_USAGE)
@@ -177,12 +256,12 @@ func (client *ClientNode) handleRecoverCommand(tokenList []string) {
 	}
 	fmt.Print("Recovering the node ", nodeId, "... ")
 	logger.Warn("Recover a node", zap.Uint32("nodeId", nodeId))
-	request := raft.RequestCommandRPC{
+	request := core.RequestCommandRPC{
 		FromNode:    client.NodeCard,
-		ToNode:      raft.NodeCard{Id: nodeId, Type: raft.SchedulerNodeType},
-		CommandType: raft.RecoverCommand,
+		ToNode:      core.NodeCard{Id: nodeId, Type: core.SchedulerNodeType},
+		CommandType: core.RecoverCommand,
 	}
-	raft.Config.NodeChannelMap[raft.SchedulerNodeType][nodeId].RequestCommand <- request
+	core.Config.NodeChannelMap[core.SchedulerNodeType][nodeId].RequestCommand <- request
 	fmt.Println("Done.")
 }
 
@@ -197,11 +276,11 @@ func (client *ClientNode) handleSpeedCommand(tokenList []string) {
 	var latency time.Duration
 	switch levelToken {
 	case LOW_SPEED.String():
-		latency = raft.LowNodeSpeed
+		latency = core.LowNodeSpeed
 	case MEDIUM_SPEED.String():
-		latency = raft.MediumNodeSpeed
+		latency = core.MediumNodeSpeed
 	case HIGH_SPEED.String():
-		latency = raft.HighNodeSpeed
+		latency = core.HighNodeSpeed
 	default:
 		fmt.Println(INVALID_SPEED_LEVEL_MESSAGE)
 		fmt.Println(SPEED_COMMAND_USAGE)
@@ -219,7 +298,7 @@ func (client *ClientNode) handleSpeedCommand(tokenList []string) {
 		zap.String("speed", levelToken),
 		zap.Duration("latency", latency),
 	)
-	raft.Config.NodeSpeedList[nodeId] = latency
+	core.Config.NodeSpeedList[nodeId] = latency
 	fmt.Println("Done.")
 }
 
@@ -227,15 +306,14 @@ func (client *ClientNode) handleSpeedCommand(tokenList []string) {
 func (client *ClientNode) handleStartCommand() {
 	fmt.Print("Starting all nodes... ")
 	client.ClusterIsStarted = true
-	for index, channelContainer := range raft.Config.NodeChannelMap[raft.SchedulerNodeType] {
-		request := raft.RequestCommandRPC{
+	for index, channelContainer := range core.Config.NodeChannelMap[core.SchedulerNodeType] {
+		request := core.RequestCommandRPC{
 			FromNode:    client.NodeCard,
-			ToNode:      raft.NodeCard{Id: uint32(index), Type: raft.SchedulerNodeType},
-			CommandType: raft.StartCommand,
+			ToNode:      core.NodeCard{Id: uint32(index), Type: core.SchedulerNodeType},
+			CommandType: core.StartCommand,
 		}
 		channelContainer.RequestCommand <- request
 	}
-	//TODO : send start command to Worker nodes
 	fmt.Println("Done.")
 }
 
@@ -260,6 +338,8 @@ func (client *ClientNode) handleCommand(command string) {
 		client.handleStartCommand()
 	case SUBMIT_COMMAND.String():
 		client.handleSubmitCommand(tokenList)
+	case STATUS_COMMAND.String():
+		client.handleStatusCommand(tokenList)
 	case STOP_COMMAND.String():
 		fmt.Println("Stopping all nodes...")
 		os.Exit(0)

@@ -1,4 +1,4 @@
-package raft
+package core
 
 // Generic RPC Type
 type RPCType interface {
@@ -18,11 +18,12 @@ const (
 	StartCommand
 	CrashCommand
 	RecoverCommand
+	StatusCommand
 )
 
 // Convert a CommandType to a string
 func (c CommandType) String() string {
-	return [...]string{"Synchronize", "AppendEntry", "Start", "Crash", "Recover"}[c]
+	return [...]string{"Synchronize", "AppendEntry", "Start", "Crash", "Recover", "Status"}[c]
 }
 
 /*****************
@@ -36,11 +37,10 @@ type RequestCommandRPC struct {
 
 	Term        uint32
 	CommandType CommandType
-	Message     string
 
 	PrevIndex   uint32
 	PrevTerm    uint32
-	Entries     []LogEntry
+	Entries     []Entry
 	CommitIndex uint32
 }
 
@@ -55,8 +55,12 @@ type ResponseCommandRPC struct {
 	CommandType CommandType
 	Message     string
 
+	// Used for SynchronizeCommand
 	Success    bool
 	MatchIndex uint32
+
+	// Used for StatusCommand
+	JobMap map[string]Job
 }
 
 /**************

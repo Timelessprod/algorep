@@ -1,14 +1,10 @@
-package raft
+package core
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
-
-	"github.com/Timelessprod/algorep/pkg/logging"
-	"go.uber.org/zap"
 )
-
-var logger *zap.Logger = logging.Logger
 
 // Node id when no node is selected
 const NO_NODE = -1
@@ -31,17 +27,6 @@ func (n NodeType) String() string {
 	return string(n)
 }
 
-/****************
- ** Node Speed **
- ****************/
-
-// Node Speed
-const (
-	LowNodeSpeed    time.Duration = 50 * time.Millisecond
-	MediumNodeSpeed time.Duration = 10 * time.Millisecond
-	HighNodeSpeed   time.Duration = 2 * time.Millisecond
-)
-
 /***********************
  ** Channel Container **
  ***********************/
@@ -53,6 +38,8 @@ type ChannelContainer struct {
 
 	RequestVote  chan RequestVoteRPC
 	ResponseVote chan ResponseVoteRPC
+
+	JobQueue chan Job
 }
 
 /***************
@@ -69,6 +56,17 @@ type NodeCard struct {
 func (n NodeCard) String() string {
 	return fmt.Sprint(n.Type.String(), " - ", n.Id)
 }
+
+/****************
+ ** Node Speed **
+ ****************/
+
+// Node Speed
+const (
+	LowNodeSpeed    time.Duration = 50 * time.Millisecond
+	MediumNodeSpeed time.Duration = 10 * time.Millisecond
+	HighNodeSpeed   time.Duration = 2 * time.Millisecond
+)
 
 /****************
  ** Node State **
@@ -88,54 +86,11 @@ func (s State) String() string {
 	return [...]string{"Follower", "Candidate", "Leader"}[s]
 }
 
-/***************
- ** Log Entry **
- ***************/
+/****************
+ ** Node Utils **
+ ****************/
 
-// LogEntry is an entry in the log
-type LogEntry struct {
-	Term    uint32
-	Command string
-}
-
-/***************************
- ** Map LogEntry function **
- ***************************/
-
-// Select range of log entries and return a new slice of log entries (start inclusive, end inclusive)
-func ExtractListFromMap(m *map[uint32]LogEntry, start uint32, end uint32) []LogEntry {
-	var list []LogEntry
-	for i := start; i <= end; i++ {
-		list = append(list, (*m)[i])
-	}
-	return list
-}
-
-// Flush the log entries after the given index. index + 1 and more are flushed but index is kept.
-func FlushAfterIndex(m *map[uint32]LogEntry, index uint32) {
-	for i := range *m {
-		if i > index {
-			delete(*m, i)
-		}
-	}
-}
-
-/***********
- ** Utils **
- ***********/
-
-// Minimum of two uint32
-func MinUint32(a uint32, b uint32) uint32 {
-	if a <= b {
-		return a
-	}
-	return b
-}
-
-// Maximum of two uint32
-func MaxUint32(a uint32, b uint32) uint32 {
-	if a >= b {
-		return a
-	}
-	return b
+// GetRandomSchedulerNodeId returns a random scheduler node id
+func GetRandomSchedulerNodeId() uint32 {
+	return uint32(rand.Intn(int(Config.SchedulerNodeCount)))
 }

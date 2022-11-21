@@ -1,4 +1,4 @@
-package raft
+package core
 
 import "time"
 
@@ -9,6 +9,7 @@ import "time"
 // Config contains the configuration of the raft algorithm
 var Config = struct {
 	SchedulerNodeCount uint32
+	WorkerNodeCount    uint32
 	ChannelBufferSize  uint32
 	// NodeChannelMap contains all the channels used by the nodes to communicate with each other
 	NodeSpeedList []time.Duration
@@ -29,8 +30,9 @@ var Config = struct {
 	MaxRetryToFindLeader uint32
 }{
 	SchedulerNodeCount: 5,
+	WorkerNodeCount:    2,
 	ChannelBufferSize:  100,
-	NodeChannelMap:     InitNodeChannelMap(),
+	NodeChannelMap:     nil,
 
 	MinElectionTimeout:   150 * time.Millisecond,
 	MaxElectionTimeout:   300 * time.Millisecond,
@@ -39,13 +41,4 @@ var Config = struct {
 	IsAliveNotificationInterval: 50 * time.Millisecond,
 
 	MaxRetryToFindLeader: 3,
-}
-
-// InitNodeChannelMap initializes the NodeChannelMap
-func InitNodeChannelMap() map[NodeType][]*ChannelContainer {
-	channelMap := make(map[NodeType][]*ChannelContainer)
-	channelMap[ClientNodeType] = make([]*ChannelContainer, 0)
-	channelMap[SchedulerNodeType] = make([]*ChannelContainer, 0)
-	channelMap[WorkerNodeType] = make([]*ChannelContainer, 0)
-	return channelMap
 }
