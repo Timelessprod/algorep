@@ -119,9 +119,14 @@ func (client *ClientNode) handleSubmitCommand(tokenList []string) {
 
 	jobFilePath := tokenList[1]
 	fmt.Print("Submitting job ", jobFilePath, "... ")
+	input, loadErr := core.LoadCodeFromFile(jobFilePath)
+	if loadErr != nil {
+		fmt.Println("Error while loading job file : ", loadErr)
+		return
+	}
 
 	job := core.Job{
-		Input:    jobFilePath, //TODO : Read file
+		Input:    input,
 		WorkerId: core.NO_WORKER,
 	}
 	entry := core.Entry{
@@ -134,12 +139,11 @@ func (client *ClientNode) handleSubmitCommand(tokenList []string) {
 		Entries:     []core.Entry{entry},
 	}
 
-	_, err := client.sendMessageToLeader(request)
-	if err != nil {
-		fmt.Println("Error: ", err)
+	_, sendErr := client.sendMessageToLeader(request)
+	if sendErr != nil {
+		fmt.Println("Error: ", sendErr)
 		return
 	}
-	//TODO : read response
 	fmt.Println("Done.")
 }
 

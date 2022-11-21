@@ -1,6 +1,9 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+	"io/ioutil"
+)
 
 const NO_WORKER = -1
 
@@ -36,4 +39,14 @@ type Job struct {
 // Get the reference `Id-Term` of the job
 func (job *Job) GetReference() string {
 	return fmt.Sprintf("%d-%d", job.Id, job.Term)
+}
+
+/***************
+ ** Load Code **
+ ***************/
+
+// Load code from a file
+func LoadCodeFromFile(path string) (string, error) {
+	content, err := ioutil.ReadFile(path)
+	return string(content), err
 }
