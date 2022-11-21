@@ -139,12 +139,12 @@ func (client *ClientNode) handleSubmitCommand(tokenList []string) {
 		Entries:     []core.Entry{entry},
 	}
 
-	_, sendErr := client.sendMessageToLeader(request)
+	response, sendErr := client.sendMessageToLeader(request)
 	if sendErr != nil {
 		fmt.Println("Error: ", sendErr)
 		return
 	}
-	fmt.Println("Done.")
+	fmt.Println(response.Message)
 }
 
 // handleStatusCommand handles the status command
