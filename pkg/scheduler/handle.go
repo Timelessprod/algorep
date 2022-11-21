@@ -143,7 +143,7 @@ func (node *SchedulerNode) handleAppendEntryCommand(request core.RequestCommandR
 			entry.Job.WorkerId = int(node.GetWorkerId())
 			entry.Job.Id = node.GetJobId()
 			entry.Job.Term = node.CurrentTerm
-			entry.Job.Status = core.JobWaiting
+			entry.Job.State = core.JobWaiting
 		}
 
 		node.addEntryToLog(entry)
@@ -151,6 +151,43 @@ func (node *SchedulerNode) handleAppendEntryCommand(request core.RequestCommandR
 
 	} else {
 		logger.Debug("Node is not the leader. Ignore AppendEntry command and redirect to leader",
+			zap.String("Node", node.Card.String()),
+			zap.Int("Presumed leader id", node.LeaderId),
+		)
+		response.Success = false
+	}
+
+	channel <- response
+}
+
+// handleStatusCommand handles the StatusCommand sent to the leader to get the status of jobs
+func (node *SchedulerNode) handleStatusCommand(request core.RequestCommandRPC) {
+	if node.IsCrashed {
+		logger.Debug("Node is crashed. Ignore Status command",
+			zap.String("Node", node.Card.String()),
+		)
+		return
+	}
+
+	channel := core.Config.NodeChannelMap[request.FromNode.Type][request.FromNode.Id].ResponseCommand
+	response := core.ResponseCommandRPC{
+		FromNode:    node.Card,
+		ToNode:      request.FromNode,
+		Term:        node.CurrentTerm,
+		CommandType: request.CommandType,
+		LeaderId:    node.LeaderId,
+	}
+
+	if node.State == core.LeaderState {
+		logger.Info("I am the leader ! Giving the status.... ",
+			zap.String("Node", node.Card.String()),
+		)
+
+		response.JobMap = node.StateMachine.JobMap
+		response.Success = true
+
+	} else {
+		logger.Debug("Node is not the leader. Ignore Status command and redirect to leader",
 			zap.String("Node", node.Card.String()),
 			zap.Int("Presumed leader id", node.LeaderId),
 		)
@@ -178,6 +215,8 @@ func (node *SchedulerNode) handleRequestCommandRPC(request core.RequestCommandRP
 		node.handleCrashCommand()
 	case core.RecoverCommand:
 		node.handleRecoverCommand()
+	case core.StatusCommand:
+		node.handleStatusCommand(request)
 	}
 }
 

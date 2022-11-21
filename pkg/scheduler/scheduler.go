@@ -171,7 +171,7 @@ func (node *SchedulerNode) printNodeStateInFile() {
 	fmt.Fprintln(f, "### Log ###")
 	for i := 1; i <= len(node.log); i++ {
 		entry := node.log[uint32(i)]
-		fmt.Fprintf(f, "[%v] Job %v | Worker %v | %v\n", i, entry.Job.GetReference(), entry.Job.WorkerId, entry.Job.Status.String())
+		fmt.Fprintf(f, "[%v] Job %v | Worker %v | %v\n", i, entry.Job.GetReference(), entry.Job.WorkerId, entry.Job.State.String())
 	}
 	fmt.Fprintln(f, "----------------")
 }

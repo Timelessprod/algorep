@@ -57,7 +57,7 @@ func (node *WorkerNode) processJob(job core.Job) {
 	// sleep 1 second
 	time.Sleep(1 * time.Second)
 
-	job.Status = core.JobDone
+	job.State = core.JobDone
 	job.Output = "MyBeautifulOutput"
 	node.closeJob(job)
 }
@@ -67,7 +67,7 @@ func (node *WorkerNode) closeJob(job core.Job) {
 	logger.Debug("Closing job ...",
 		zap.String("Node", node.Card.String()),
 		zap.String("Job", job.GetReference()),
-		zap.String("JobStatus", job.Status.String()),
+		zap.String("JobStatus", job.State.String()),
 	)
 
 	entry := core.Entry{

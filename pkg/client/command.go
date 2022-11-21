@@ -19,6 +19,7 @@ const (
 	CRASH_COMMAND   CommandType = "CRASH"
 	START_COMMAND   CommandType = "START"
 	SUBMIT_COMMAND  CommandType = "SUBMIT"
+	STATUS_COMMAND  CommandType = "STATUS"
 	STOP_COMMAND    CommandType = "STOP"
 	RECOVER_COMMAND CommandType = "RECOVER"
 	HELP_COMMAND    CommandType = "HELP"
@@ -58,15 +59,18 @@ const (
 	- RECOVER <node number> : recover a crashed node. For example: 'RECOVER 2' will recover node 2.
 	- START : start the cluster. You can use this command only once.
 	- SUBMIT <job file> : submit a job to the cluster. The cluster must be STARTed before. For example: 'SUBMIT job.json' will submit the job described in the file job.json.
+	- STATUS [<job reference>] : display the status of the cluster or of a specific job. For example: 'STATUS' will display the status of the cluster. 'STATUS 1-2' will display the status of the job with reference 1-2.
 	- STOP : stop the cluster. This command will kill the program.
 	- HELP : display this message.`
-	SPEED_COMMAND_USAGE         = "The SPEED command must have the following form: `SPEED (low|medium|high) <node number>`. For example: 'SPEED high 2'"
-	CRASH_COMMAND_USAGE         = "The CRASH command must have the following form: `CRASH <node number>`. For example: 'CRASH 2'"
-	SUBMIT_COMMAND_USAGE        = "The SUBMIT command must have the following form: `SUBMIT <job file>`. For example: 'SUBMIT job.json'"
-	RECOVER_COMMAND_USAGE       = "The RECOVER command must have the following form: `RECOVER <node number>`. For example: 'RECOVER 2'"
-	INVALID_COMMAND_MESSAGE     = "Invalid command !"
-	INVALID_SPEED_LEVEL_MESSAGE = "Invalid speed level !"
-	NOT_STARTED_MESSAGE         = "Cluster is not started yet ! Run the START command first."
+	SPEED_COMMAND_USAGE           = "The SPEED command must have the following form: `SPEED (low|medium|high) <node number>`. For example: 'SPEED high 2'"
+	CRASH_COMMAND_USAGE           = "The CRASH command must have the following form: `CRASH <node number>`. For example: 'CRASH 2'"
+	SUBMIT_COMMAND_USAGE          = "The SUBMIT command must have the following form: `SUBMIT <job file>`. For example: 'SUBMIT job.json'"
+	RECOVER_COMMAND_USAGE         = "The RECOVER command must have the following form: `RECOVER <node number>`. For example: 'RECOVER 2'"
+	STATUS_COMMAND_USAGE          = "The STATUS command must have the following form: `STATUS` or `STATUS <JobReference>`. For example: 'STATUS' or 'STATUS 1-2'"
+	INVALID_JOB_REFERENCE_MESSAGE = "Job not found ! Please make sure you have provided a valid reference. The job reference must have the following form: `<JobId>-<Term>`. For example: '1-2'"
+	INVALID_COMMAND_MESSAGE       = "Invalid command !"
+	INVALID_SPEED_LEVEL_MESSAGE   = "Invalid speed level !"
+	NOT_STARTED_MESSAGE           = "Cluster is not started yet ! Run the START command first."
 )
 
 // ParseNodeNumber parses the node number from a command

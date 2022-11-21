@@ -143,6 +143,80 @@ func (client *ClientNode) handleSubmitCommand(tokenList []string) {
 	fmt.Println("Done.")
 }
 
+// handleStatusCommand handles the status command
+func (client *ClientNode) handleStatusCommand(tokenList []string) {
+	if len(tokenList) > 2 {
+		fmt.Println(STATUS_COMMAND_USAGE)
+		return
+	}
+
+	if !client.ClusterIsStarted {
+		fmt.Println(NOT_STARTED_MESSAGE)
+		return
+	}
+
+	// If the job reference is given
+	JobReference := ""
+	if len(tokenList) == 2 {
+		JobReference = tokenList[1]
+	}
+
+	fmt.Print("Getting status... ")
+
+	request := core.RequestCommandRPC{
+		FromNode:    client.NodeCard,
+		CommandType: core.StatusCommand,
+	}
+
+	response, err := client.sendMessageToLeader(request)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		return
+	}
+
+	JobMap := response.JobMap
+
+	// If no argument is given, print the status of the cluster
+	if JobReference == "" {
+		fmt.Println("Done.")
+		printAllJobs(JobMap)
+		return
+	}
+
+	// Else, print the status of the given job
+	job, ok := JobMap[JobReference]
+	if !ok {
+		fmt.Println(INVALID_JOB_REFERENCE_MESSAGE)
+		return
+	}
+	// Print all the job status
+	fmt.Println("Done.")
+	printJobStatus(job)
+
+}
+
+// printAllJobs prints all the jobs in the cluster
+func printAllJobs(JobMap map[string]core.Job) {
+	format := "%10s | %7s | %10s |\n"
+	fmt.Printf(format, "Reference", "Worker", "State")
+	fmt.Printf(format, "----------", "-------", "----------")
+	for reference, job := range JobMap {
+		fmt.Printf(format, reference, fmt.Sprint(job.WorkerId), job.State)
+	}
+}
+
+// printJobStatus prints the status of a given job
+func printJobStatus(job core.Job) {
+	fmt.Println("### JOB STATUS ###")
+	fmt.Println("> Reference : ", job.GetReference())
+	fmt.Println("> Worker Id : ", job.WorkerId)
+	fmt.Println("> State : ", job.State)
+	fmt.Println("-- Input --\n", job.Input)
+	fmt.Println("\n\n-- Output --\n", job.Output)
+	fmt.Println("\n\n##################")
+
+}
+
 // handleStartCommand handles the start cluster command
 func (client *ClientNode) handleCrashCommand(tokenList []string) {
 	if len(tokenList) != 2 {
@@ -165,7 +239,7 @@ func (client *ClientNode) handleCrashCommand(tokenList []string) {
 	fmt.Println("Done.")
 }
 
-// handleReplCommand handles the recover command
+// handleRecoverCommand handles the recover command
 func (client *ClientNode) handleRecoverCommand(tokenList []string) {
 	if len(tokenList) != 2 {
 		fmt.Println(RECOVER_COMMAND_USAGE)
@@ -261,6 +335,8 @@ func (client *ClientNode) handleCommand(command string) {
 		client.handleStartCommand()
 	case SUBMIT_COMMAND.String():
 		client.handleSubmitCommand(tokenList)
+	case STATUS_COMMAND.String():
+		client.handleStatusCommand(tokenList)
 	case STOP_COMMAND.String():
 		fmt.Println("Stopping all nodes...")
 		os.Exit(0)
