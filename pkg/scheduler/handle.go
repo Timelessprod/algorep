@@ -182,6 +182,7 @@ func (node *SchedulerNode) handleStatusCommand(request core.RequestCommandRPC) {
 	if node.State == core.LeaderState {
 		logger.Info("I am the leader ! Giving the status.... ",
 			zap.String("Node", node.Card.String()),
+			zap.Int("Number of jobs", len(node.StateMachine.JobMap)),
 		)
 
 		response.JobMap = node.StateMachine.JobMap

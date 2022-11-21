@@ -278,11 +278,17 @@ func (node *SchedulerNode) updateCommitIndex() {
 	}
 
 	// Find the largest number M such that a majority of nodes has matchIndex[i] ≥ M
-	matchIndexMedianList := make([]uint32, len(node.matchIndex)+1)
+	matchIndexMedianList := make([]uint32, len(node.matchIndex))
 	copy(matchIndexMedianList, node.matchIndex)
-	matchIndexMedianList = append(matchIndexMedianList, uint32(len(node.log)))
+	matchIndexMedianList[node.Card.Id] = uint32(len(node.log)) // Set the current max index because the value in MatchIndex is 0 when the node is leader
 	sort.Slice(matchIndexMedianList, func(i, j int) bool { return matchIndexMedianList[i] < matchIndexMedianList[j] })
 	median := matchIndexMedianList[core.Config.SchedulerNodeCount/2]
+	logger.Debug("Update commit index to the number of majority commit indexes (median)",
+		zap.String("Node", node.Card.String()),
+		zap.Uint32("Median", median),
+		zap.Uint32("CommitIndex", node.commitIndex),
+		zap.String("matchIndexMedianList", fmt.Sprint(matchIndexMedianList)),
+	)
 
 	if node.LogTerm(median) == node.CurrentTerm {
 		node.commitIndex = median
