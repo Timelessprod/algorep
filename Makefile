@@ -22,3 +22,4 @@ clean:
 	rm -f $(BIN)
 	rm -f app.log
 	rm -rf state/*.node
+	rm -f *.out
