@@ -148,6 +148,7 @@ func (node *SchedulerNode) handleAppendEntryCommand(request core.RequestCommandR
 
 		node.addEntryToLog(entry)
 		response.Success = true
+		response.Message = fmt.Sprintf("Job %s submitted.", entry.Job.GetReference())
 
 	} else {
 		logger.Debug("Node is not the leader. Ignore AppendEntry command and redirect to leader",
