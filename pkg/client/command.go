@@ -53,7 +53,7 @@ func (c SpeedCommandType) String() string {
  *******************/
 
 const (
-	HELP_MESSAGE = `You can use 5 commands :
+	HELP_MESSAGE = `You can use 8 commands :
 	- SPEED (low|medium|high) <node number> : change the speed of a node. For example: 'SPEED high 2' will change the speed of node 2 to high.
 	- CRASH <node number> : crash a node. For example: 'CRASH 2' will crash node 2.
 	- RECOVER <node number> : recover a crashed node. For example: 'RECOVER 2' will recover node 2.
